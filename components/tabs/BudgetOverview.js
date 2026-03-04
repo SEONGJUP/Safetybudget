@@ -74,7 +74,7 @@ export default function BudgetOverview() {
       }, 0);
 
     return {
-      name: cat.shortName,
+      name: cat.name,
       예산: Math.round(planned / 1000),
       집행: Math.round(executed / 1000),
       집행률: planned > 0 ? ((executed / planned) * 100).toFixed(1) : 0,

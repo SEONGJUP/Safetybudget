@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { CATEGORY_FIELDS, createEmptyRow, applyAutoCalc } from '@/lib/categoryFields';
 import CurrencyInput from '@/components/ui/CurrencyInput';
 import Button from '@/components/ui/Button';
@@ -12,18 +12,26 @@ export default function CategoryDetailTable({ categoryId, details, onChange, etc
 
   const { fields, autoCalcRules } = config;
 
-  // 그룹 헤더 계산
-  const groups = [];
-  let currentGroup = null;
+  // 그룹 존재 여부
+  const hasGroups = fields.some((f) => f.group);
+
+  // 그룹 헤더 구성: [{type:'group', label, colSpan} | {type:'field', field, rowSpan}]
+  const headerRow1 = [];
+  const headerRow2 = [];
+  const processedGroups = new Set();
+
   fields.forEach((f) => {
-    if (f.group && f.group !== currentGroup) {
-      currentGroup = f.group;
-      groups.push({ group: f.group, colspan: fields.filter((ff) => ff.group === f.group).length });
-    } else if (!f.group) {
-      currentGroup = null;
+    if (f.group) {
+      if (!processedGroups.has(f.group)) {
+        processedGroups.add(f.group);
+        const groupFields = fields.filter((ff) => ff.group === f.group);
+        headerRow1.push({ type: 'group', label: f.group, colSpan: groupFields.length, key: `g-${f.group}` });
+        groupFields.forEach((gf) => headerRow2.push(gf));
+      }
+    } else {
+      headerRow1.push({ type: 'field', field: f, rowSpan: hasGroups ? 2 : 1, key: `f-${f.key}` });
     }
   });
-  const hasGroups = groups.length > 0;
 
   const handleCellChange = useCallback((rowIdx, fieldKey, value) => {
     const updated = details.map((row, i) => {
@@ -50,8 +58,7 @@ export default function CategoryDetailTable({ categoryId, details, onChange, etc
     onChange(details.filter((_, i) => i !== idx));
   }, [details, onChange]);
 
-  // 합계 행 계산
-  const amountFields = fields.filter((f) => f.isAmount || f.computed);
+  // 합계
   const totals = {};
   fields.forEach((f) => {
     if (f.type === 'currency' || f.type === 'number') {
@@ -59,67 +66,64 @@ export default function CategoryDetailTable({ categoryId, details, onChange, etc
     }
   });
 
+  const totalCols = fields.length + 2; // fields + No + 관리
+
   return (
     <div>
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full text-sm border-collapse">
           <thead>
-            {/* 그룹 헤더 행 */}
-            {hasGroups && (
-              <tr className="border-b border-gray-200 bg-gray-100">
-                <th className="px-2 py-1.5 text-center text-xs font-semibold text-gray-500 w-10">No</th>
-                {fields.map((f, idx) => {
-                  // 그룹의 첫 필드만 colspan으로 표시
-                  if (f.group) {
-                    const isFirst = fields.findIndex((ff) => ff.group === f.group) === idx;
-                    if (!isFirst) return null;
-                    const span = fields.filter((ff) => ff.group === f.group).length;
-                    return (
-                      <th
-                        key={`gh-${f.group}`}
-                        colSpan={span}
-                        className="px-2 py-1.5 text-center text-xs font-bold text-gray-700 border-l border-gray-200"
-                      >
-                        {f.group}
+            {hasGroups ? (
+              <>
+                {/* 그룹 헤더 행 */}
+                <tr className="border-b border-gray-200 bg-gray-100">
+                  <th rowSpan={2} className="px-2 py-1.5 text-center text-xs font-semibold text-gray-500 w-10 border-b border-gray-200">No</th>
+                  {headerRow1.map((h) =>
+                    h.type === 'group' ? (
+                      <th key={h.key} colSpan={h.colSpan} className="px-2 py-1.5 text-center text-xs font-bold text-gray-700 border-l border-gray-200">
+                        {h.label}
                       </th>
-                    );
-                  }
-                  return (
-                    <th key={`gh-${f.key}`} rowSpan={2} className="px-2 py-1.5 text-center text-xs font-semibold text-gray-600" style={{ minWidth: f.width }}>
+                    ) : (
+                      <th key={h.key} rowSpan={h.rowSpan} className="px-2 py-1.5 text-center text-xs font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: h.field.width }}>
+                        {h.field.label}
+                      </th>
+                    )
+                  )}
+                  <th rowSpan={2} className="px-2 py-1.5 text-center text-xs font-semibold text-gray-500 w-16 border-b border-gray-200">관리</th>
+                </tr>
+                {/* 그룹 내 서브 라벨 행 */}
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  {headerRow2.map((f) => (
+                    <th
+                      key={f.key}
+                      className={`px-2 py-1.5 text-xs font-semibold text-gray-600 border-l border-gray-200 ${f.type === 'currency' || f.type === 'number' ? 'text-right' : 'text-center'}`}
+                      style={{ minWidth: f.width }}
+                    >
                       {f.label}
                     </th>
-                  );
-                })}
-                <th rowSpan={2} className="px-2 py-1.5 text-center text-xs font-semibold text-gray-500 w-16">관리</th>
-              </tr>
-            )}
-            {/* 필드 라벨 행 */}
-            <tr className="border-b border-gray-200 bg-gray-50">
-              {!hasGroups && (
+                  ))}
+                </tr>
+              </>
+            ) : (
+              <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-500 w-10">No</th>
-              )}
-              {fields.map((f) => {
-                // 그룹이 없는 필드는 이미 rowSpan으로 처리
-                if (hasGroups && !f.group) return null;
-                return (
+                {fields.map((f) => (
                   <th
                     key={f.key}
-                    className={`px-2 py-2 text-xs font-semibold text-gray-600 ${f.type === 'currency' || f.type === 'number' ? 'text-right' : 'text-center'} ${hasGroups && f.group ? 'border-l border-gray-200' : ''}`}
+                    className={`px-2 py-2 text-xs font-semibold text-gray-600 ${f.type === 'currency' || f.type === 'number' ? 'text-right' : 'text-center'}`}
                     style={{ minWidth: f.width }}
                   >
-                    {hasGroups ? f.label : f.label}
+                    {f.label}
                   </th>
-                );
-              })}
-              {!hasGroups && (
+                ))}
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-500 w-16">관리</th>
-              )}
-            </tr>
+              </tr>
+            )}
           </thead>
           <tbody>
-            {details.length === 0 ? (
+            {details.length === 0 && etcAmount <= 0 ? (
               <tr>
-                <td colSpan={fields.length + 2} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={totalCols} className="px-4 py-8 text-center text-gray-400 text-sm">
                   등록된 내역이 없습니다. 아래 [+ 행 추가] 버튼을 눌러 추가하세요.
                 </td>
               </tr>
@@ -166,18 +170,10 @@ export default function CategoryDetailTable({ categoryId, details, onChange, etc
                   ))}
                   <td className="px-1 py-1">
                     <div className="flex items-center justify-center gap-0.5">
-                      <button
-                        onClick={() => handleDuplicateRow(rowIdx)}
-                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                        title="복사"
-                      >
+                      <button onClick={() => handleDuplicateRow(rowIdx)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="복사">
                         <Copy size={12} />
                       </button>
-                      <button
-                        onClick={() => handleDeleteRow(rowIdx)}
-                        className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
-                        title="삭제"
-                      >
+                      <button onClick={() => handleDeleteRow(rowIdx)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="삭제">
                         <Trash2 size={12} />
                       </button>
                     </div>
@@ -188,15 +184,12 @@ export default function CategoryDetailTable({ categoryId, details, onChange, etc
           </tbody>
           {(details.length > 0 || etcAmount > 0) && (
             <tfoot>
-              {/* 기타 행: 집계금액 - 상세합계 차액 */}
               {etcAmount > 0 && (
                 <tr className="border-t border-amber-200 bg-amber-50/50">
                   <td className="px-2 py-1.5 text-center text-xs text-amber-600 font-medium">기타</td>
                   {fields.map((f) => (
                     <td key={f.key} className={`px-2 py-1.5 text-right text-xs tabular-nums ${f.group ? 'border-l border-gray-100' : ''}`}>
-                      {f.isAmount ? (
-                        <span className="text-amber-600 font-semibold">{formatCurrency(etcAmount)}</span>
-                      ) : ''}
+                      {f.isAmount ? <span className="text-amber-600 font-semibold">{formatCurrency(etcAmount)}</span> : ''}
                     </td>
                   ))}
                   <td></td>

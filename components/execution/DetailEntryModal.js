@@ -4,11 +4,12 @@ import { BUDGET_CATEGORIES } from '@/lib/constants';
 import { CATEGORY_FIELDS, calcDetailsTotal } from '@/lib/categoryFields';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
+import FileUpload from '@/components/ui/FileUpload';
 import CategoryDetailTable from './CategoryDetailTable';
 import C08OrgInfoForm from './C08OrgInfoForm';
 import CategorySummaryFooter from './CategorySummaryFooter';
-import { formatCurrency } from '@/lib/utils';
-import { Save, X } from 'lucide-react';
+import { formatCurrency, generateId } from '@/lib/utils';
+import { Save, X, Paperclip } from 'lucide-react';
 
 export default function DetailEntryModal({
   year,
@@ -41,6 +42,16 @@ export default function DetailEntryModal({
     return map;
   });
 
+  // 카테고리별 증빙파일 상태
+  const [categoryEvidences, setCategoryEvidences] = useState(() => {
+    const map = {};
+    BUDGET_CATEGORIES.forEach((cat) => {
+      const item = items.find((i) => i.categoryId === cat.id);
+      map[cat.id] = item?.evidences || [];
+    });
+    return map;
+  });
+
   const handleDetailsChange = useCallback((catId, newDetails) => {
     setAllDetails((prev) => ({
       ...prev,
@@ -55,18 +66,32 @@ export default function DetailEntryModal({
     }));
   }, []);
 
+  const handleEvidenceAdd = useCallback((catId, fileInfo) => {
+    setCategoryEvidences((prev) => ({
+      ...prev,
+      [catId]: [...(prev[catId] || []), { ...fileInfo, id: generateId(), categoryId: catId }],
+    }));
+  }, []);
+
+  const handleEvidenceRemove = useCallback((catId, idx) => {
+    setCategoryEvidences((prev) => ({
+      ...prev,
+      [catId]: (prev[catId] || []).filter((_, i) => i !== idx),
+    }));
+  }, []);
+
   const handleSave = () => {
     const updatedItems = items.map((item) => {
       if (!item.useDetail) return item;
       const catData = allDetails[item.categoryId];
       const detailSum = calcDetailsTotal(item.categoryId, catData?.details || []);
-      // amount = max(기존 amount, 상세합계) → 기타 차액 보존
       const newAmount = Math.max(Number(item.amount) || 0, detailSum);
       return {
         ...item,
         amount: newAmount,
         details: catData?.details || [],
         orgInfo: item.categoryId === 'C08' ? catData?.orgInfo : item.orgInfo,
+        evidences: categoryEvidences[item.categoryId] || [],
       };
     });
     onSave(updatedItems);
@@ -76,8 +101,8 @@ export default function DetailEntryModal({
   const currentItem = items.find((i) => i.categoryId === activeCat);
   const currentDetailSum = calcDetailsTotal(activeCat, currentCatData.details || []);
   const currentItemAmount = Number(currentItem?.amount) || 0;
-  // 기타 = 집계금액 - 상세합계 (양수만)
   const etcAmount = Math.max(0, currentItemAmount - currentDetailSum);
+  const currentEvidences = categoryEvidences[activeCat] || [];
 
   if (detailCategories.length === 0) {
     return (
@@ -96,16 +121,17 @@ export default function DetailEntryModal({
   return (
     <Modal isOpen onClose={onClose} title={`사용내역 (${year}년 ${String(month).padStart(2, '0')}월)`} size="full" depth={2}>
       <div className="flex h-[calc(100vh-140px)]">
-        {/* 좌측 사이드바: useDetail 카테고리만 표시 */}
-        <div className="w-48 flex-shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto">
+        {/* 좌측 사이드바 */}
+        <div className="w-52 flex-shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto">
           <nav className="py-2">
             {detailCategories.map((cat) => {
               const catData = allDetails[cat.id];
               const item = items.find((i) => i.categoryId === cat.id);
               const count = catData?.details?.length || 0;
-              const detailSum = calcDetailsTotal(cat.id, catData?.details || []);
               const itemAmount = Number(item?.amount) || 0;
+              const detailSum = calcDetailsTotal(cat.id, catData?.details || []);
               const etc = Math.max(0, itemAmount - detailSum);
+              const evCount = (categoryEvidences[cat.id] || []).length;
               const isActive = activeCat === cat.id;
 
               return (
@@ -134,13 +160,20 @@ export default function DetailEntryModal({
                       </p>
                     )}
                   </div>
-                  {count > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                      isActive ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {count}
-                    </span>
-                  )}
+                  <div className="flex flex-col items-end gap-0.5">
+                    {count > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                        isActive ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {count}
+                      </span>
+                    )}
+                    {evCount > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600 font-bold flex items-center gap-0.5">
+                        <Paperclip size={8} />{evCount}
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -161,7 +194,7 @@ export default function DetailEntryModal({
           </div>
         </div>
 
-        {/* 중앙: 상세 내역 테이블 */}
+        {/* 중앙: 상세 내역 */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto px-4 py-3">
             {/* 카테고리 타이틀 */}
@@ -194,6 +227,24 @@ export default function DetailEntryModal({
               onChange={(newDetails) => handleDetailsChange(activeCat, newDetails)}
               etcAmount={etcAmount}
             />
+
+            {/* 증빙자료 첨부 */}
+            <div className="border border-gray-200 rounded-lg p-3 mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Paperclip size={14} className="text-gray-500" />
+                <h4 className="text-xs font-bold text-gray-700">증빙자료</h4>
+                {currentEvidences.length > 0 && (
+                  <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-bold">
+                    {currentEvidences.length}건
+                  </span>
+                )}
+              </div>
+              <FileUpload
+                files={currentEvidences}
+                onAdd={(fileInfo) => handleEvidenceAdd(activeCat, fileInfo)}
+                onRemove={(idx) => handleEvidenceRemove(activeCat, idx)}
+              />
+            </div>
 
             {/* 하단 합계 */}
             <CategorySummaryFooter

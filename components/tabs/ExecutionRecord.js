@@ -768,13 +768,19 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
             {items.map((item) => {
               const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
               const detailCount = item.details?.length || 0;
+              const evCount = item.evidences?.length || 0;
               return (
                 <tr key={item.categoryId} className="border-b border-gray-50">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
-                      <span>{cat?.shortName}</span>
+                      <span className="text-xs">{cat?.shortName}</span>
                       {item.useDetail && detailCount > 0 && (
                         <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
+                      )}
+                      {item.useDetail && evCount > 0 && (
+                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+                          <Paperclip size={8} />{evCount}
+                        </span>
                       )}
                     </div>
                   </td>

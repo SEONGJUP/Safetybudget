@@ -17,7 +17,7 @@ export default function C08OrgInfoForm({ orgInfo, onChange }) {
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50 mb-4">
-      <h4 className="text-sm font-bold text-gray-700 mb-3">조직현황</h4>
+      <h4 className="text-sm font-bold text-gray-700 mb-3">조직 현황</h4>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">시공능력평가순위</label>
@@ -50,7 +50,7 @@ export default function C08OrgInfoForm({ orgInfo, onChange }) {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">인원수</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">인원 수</label>
           <input
             type="number"
             value={info.headcount || ''}
@@ -60,14 +60,14 @@ export default function C08OrgInfoForm({ orgInfo, onChange }) {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">계상총액</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">안전보건관리비 계상총액</label>
           <CurrencyInput
             value={info.totalBudget || 0}
             onChange={(val) => handleChange('totalBudget', val)}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">본사계상액</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">본사 임금 등 계상액(계획)</label>
           <CurrencyInput
             value={info.hqBudget || 0}
             onChange={(val) => handleChange('hqBudget', val)}
