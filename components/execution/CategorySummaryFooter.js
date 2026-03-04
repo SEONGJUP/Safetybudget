@@ -6,6 +6,7 @@ import { calcDetailsTotal } from '@/lib/categoryFields';
 export default function CategorySummaryFooter({
   categoryId,
   currentDetails,
+  currentMonthAmount,
   budgetPlans,
   executionRecords,
   companyId,
@@ -31,8 +32,10 @@ export default function CategorySummaryFooter({
       return sum + (item ? Number(item.amount) || 0 : 0);
     }, 0);
 
-  // 금월(B): 현재 상세 내역의 합계
-  const currentMonth = calcDetailsTotal(categoryId, currentDetails);
+  // 금월(B): currentMonthAmount가 있으면 그 값(기타 포함), 없으면 상세 합계
+  const currentMonth = currentMonthAmount != null
+    ? currentMonthAmount
+    : calcDetailsTotal(categoryId, currentDetails);
 
   // 누계(A+B)
   const cumulative = prevMonthTotal + currentMonth;

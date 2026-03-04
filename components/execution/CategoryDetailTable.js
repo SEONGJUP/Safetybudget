@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import { Plus, Trash2, Copy } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
-export default function CategoryDetailTable({ categoryId, details, onChange }) {
+export default function CategoryDetailTable({ categoryId, details, onChange, etcAmount = 0 }) {
   const config = CATEGORY_FIELDS[categoryId];
   if (!config) return null;
 
@@ -186,15 +186,32 @@ export default function CategoryDetailTable({ categoryId, details, onChange }) {
               ))
             )}
           </tbody>
-          {details.length > 0 && (
+          {(details.length > 0 || etcAmount > 0) && (
             <tfoot>
+              {/* 기타 행: 집계금액 - 상세합계 차액 */}
+              {etcAmount > 0 && (
+                <tr className="border-t border-amber-200 bg-amber-50/50">
+                  <td className="px-2 py-1.5 text-center text-xs text-amber-600 font-medium">기타</td>
+                  {fields.map((f) => (
+                    <td key={f.key} className={`px-2 py-1.5 text-right text-xs tabular-nums ${f.group ? 'border-l border-gray-100' : ''}`}>
+                      {f.isAmount ? (
+                        <span className="text-amber-600 font-semibold">{formatCurrency(etcAmount)}</span>
+                      ) : ''}
+                    </td>
+                  ))}
+                  <td></td>
+                </tr>
+              )}
               <tr className="bg-primary-light/50 font-bold border-t-2 border-gray-200">
                 <td className="px-2 py-2 text-center text-xs text-gray-600">합계</td>
                 {fields.map((f) => (
                   <td key={f.key} className={`px-2 py-2 text-right text-xs tabular-nums ${f.group ? 'border-l border-gray-100' : ''}`}>
                     {(f.type === 'currency' || f.type === 'number') ? (
                       <span className={f.isAmount ? 'text-primary font-extrabold' : 'text-gray-700'}>
-                        {f.type === 'currency' ? formatCurrency(totals[f.key] || 0) : (totals[f.key] || 0)}
+                        {f.isAmount
+                          ? formatCurrency((totals[f.key] || 0) + etcAmount)
+                          : f.type === 'currency' ? formatCurrency(totals[f.key] || 0) : (totals[f.key] || 0)
+                        }
                       </span>
                     ) : ''}
                   </td>
