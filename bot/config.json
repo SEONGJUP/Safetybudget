@@ -1,0 +1,13 @@
+{
+  "prefix": "!claude",
+  "channelProjects": {
+    "CHANNEL_ID_1": {
+      "name": "safety-budget",
+      "cwd": "D:\\SEIIM CODE\\safety-budget"
+    },
+    "CHANNEL_ID_2": {
+      "name": "another-project",
+      "cwd": "D:\\SEIIM CODE\\another-project"
+    }
+  }
+}
