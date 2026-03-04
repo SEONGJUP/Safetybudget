@@ -13,7 +13,8 @@ import { formatCurrency, formatPercent, formatFileSize, formatDate, generateId, 
 import CompanyLogo from '@/components/ui/CompanyLogo';
 import CompanySelect from '@/components/ui/CompanySelect';
 import Select from '@/components/ui/Select';
-import { Save, Send, Edit3, FileText, Paperclip, Download, Trash2, Eye, Check, X, Printer } from 'lucide-react';
+import { Save, Send, Edit3, FileText, Paperclip, Download, Trash2, Eye, Check, X, Printer, List } from 'lucide-react';
+import DetailEntryModal from '@/components/execution/DetailEntryModal';
 
 export default function ExecutionRecord() {
   const { data, selectedCompanyId, selectedPeriod, selectedYear, saveExecutionRecord, addEvidence, removeEvidence, updateReportStatus, addReport } = useBudget();
@@ -669,9 +670,10 @@ function ReportPreviewModal({ year, month, report, executionRecords, companies, 
 
 /* ─── 집행실적 편집 모달 (증빙 첨부 포함) ─── */
 function ExecutionEditModal({ year, month, record, isNew, companies, selectedCompanyId, onSave, onClose }) {
+  const { data } = useBudget();
   const initialItems = record
-    ? [...record.items]
-    : BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '' }));
+    ? record.items.map((item) => ({ ...item, details: item.details || [], orgInfo: item.orgInfo || null }))
+    : BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '', details: [], orgInfo: null }));
 
   const [items, setItems] = useState(initialItems);
   const [companyId, setCompanyId] = useState(
@@ -679,6 +681,7 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
   );
   const [categoryId, setCategoryId] = useState('all');
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const handleAmountChange = (catId, value) => {
     setItems((prev) =>
@@ -776,6 +779,18 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
           </tfoot>
         </table>
 
+        {/* 상세내역 입력 버튼 */}
+        <div className="flex justify-center border-t border-gray-100 pt-3">
+          <Button
+            variant="outline"
+            icon={List}
+            onClick={() => setDetailModalOpen(true)}
+            className="w-full"
+          >
+            건별 상세내역 입력
+          </Button>
+        </div>
+
         {/* 증빙 첨부 */}
         <div className="border-t border-gray-100 pt-4">
           <div className="flex items-center gap-2 mb-3">
@@ -803,6 +818,23 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
           <Button icon={Send} onClick={() => handleSave('submitted')}>검토요청</Button>
         </div>
       </div>
+
+      {/* 상세내역 입력 모달 */}
+      {detailModalOpen && (
+        <DetailEntryModal
+          year={record?.year || year}
+          month={month}
+          items={items}
+          companyId={companyId}
+          budgetPlans={data?.budgetPlans || []}
+          executionRecords={data?.executionRecords || []}
+          onSave={(updatedItems) => {
+            setItems(updatedItems);
+            setDetailModalOpen(false);
+          }}
+          onClose={() => setDetailModalOpen(false)}
+        />
+      )}
     </Modal>
   );
 }
