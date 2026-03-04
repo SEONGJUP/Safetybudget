@@ -672,8 +672,8 @@ function ReportPreviewModal({ year, month, report, executionRecords, companies, 
 function ExecutionEditModal({ year, month, record, isNew, companies, selectedCompanyId, onSave, onClose }) {
   const { data } = useBudget();
   const initialItems = record
-    ? record.items.map((item) => ({ ...item, details: item.details || [], orgInfo: item.orgInfo || null, useDetail: item.useDetail || false }))
-    : BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '', details: [], orgInfo: null, useDetail: false }));
+    ? record.items.map((item) => ({ ...item, details: item.details || [], orgInfo: item.orgInfo || null, evidences: item.evidences || [] }))
+    : BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '', details: [], orgInfo: null, evidences: [] }));
 
   const [items, setItems] = useState(initialItems);
   const [companyId, setCompanyId] = useState(
@@ -681,20 +681,12 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
   );
   const [categoryId, setCategoryId] = useState('all');
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(null);
 
   const handleAmountChange = (catId, value) => {
     setItems((prev) =>
       prev.map((item) =>
         item.categoryId === catId ? { ...item, amount: value } : item
-      )
-    );
-  };
-
-  const handleToggleDetail = (catId) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.categoryId === catId ? { ...item, useDetail: !item.useDetail } : item
       )
     );
   };
@@ -773,26 +765,22 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
                 <tr key={item.categoryId} className="border-b border-gray-50">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs">{cat?.shortName}</span>
-                      {item.useDetail && detailCount > 0 && (
+                      {detailCount > 0 && (
                         <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
                       )}
-                      {item.useDetail && evCount > 0 && (
+                      {evCount > 0 && (
                         <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
                           <Paperclip size={8} />{evCount}
                         </span>
                       )}
+                      <span className="text-xs">{cat?.shortName}</span>
                     </div>
                   </td>
                   <td className="px-1 py-2 text-center">
                     <button
-                      onClick={() => handleToggleDetail(item.categoryId)}
-                      className={`p-1.5 rounded-md transition-colors ${
-                        item.useDetail
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                      }`}
-                      title={item.useDetail ? '상세관리 해제' : '상세관리 설정'}
+                      onClick={() => setDetailModalOpen(item.categoryId)}
+                      className="p-1.5 rounded-md transition-colors bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary"
+                      title="상세내역 입력"
                     >
                       <List size={13} />
                     </button>
@@ -814,20 +802,6 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
             </tr>
           </tfoot>
         </table>
-
-        {/* 상세내역 입력 버튼 */}
-        {items.some((i) => i.useDetail) && (
-          <div className="flex justify-center border-t border-gray-100 pt-3">
-            <Button
-              variant="outline"
-              icon={List}
-              onClick={() => setDetailModalOpen(true)}
-              className="w-full"
-            >
-              건별 상세내역 입력 ({items.filter((i) => i.useDetail).length}개 항목)
-            </Button>
-          </div>
-        )}
 
         {/* 증빙 첨부 */}
         <div className="border-t border-gray-100 pt-4">
@@ -863,19 +837,15 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
           year={record?.year || year}
           month={month}
           items={items}
+          initialCategory={detailModalOpen}
           companyId={companyId}
           budgetPlans={data?.budgetPlans || []}
           executionRecords={data?.executionRecords || []}
           onSave={(updatedItems) => {
-            // useDetail이 아닌 항목은 기존 items 값 유지
-            const merged = items.map((orig) => {
-              const updated = updatedItems.find((u) => u.categoryId === orig.categoryId);
-              return updated || orig;
-            });
-            setItems(merged);
-            setDetailModalOpen(false);
+            setItems(updatedItems);
+            setDetailModalOpen(null);
           }}
-          onClose={() => setDetailModalOpen(false)}
+          onClose={() => setDetailModalOpen(null)}
         />
       )}
     </Modal>
