@@ -6,6 +6,7 @@ import {
   FileText,
   Upload,
   BarChart3,
+  Building2,
 } from 'lucide-react';
 
 const ICONS = {
@@ -15,12 +16,13 @@ const ICONS = {
   FileText,
   Upload,
   BarChart3,
+  Building2,
 };
 
-export default function TabNav({ tabs, activeTab, onChange }) {
+export default function TabNav({ tabs, activeTab, onChange, maxWidth }) {
   return (
     <div className="border-b border-gray-200 bg-white" data-tutorial="tabs">
-      <nav className="flex overflow-x-auto tab-scroll px-2 sm:px-4 -mb-px" aria-label="Tabs">
+      <nav className="flex overflow-x-auto tab-scroll px-2 sm:px-4 -mb-px mx-auto" style={maxWidth ? { maxWidth } : {}} aria-label="Tabs">
         {tabs.map((tab) => {
           const Icon = ICONS[tab.icon];
           const isActive = activeTab === tab.id;

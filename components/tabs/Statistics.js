@@ -44,13 +44,17 @@ export default function Statistics() {
     ? companyFilteredRecords.filter((r) => r.year === selectedYear)
     : companyFilteredRecords;
 
-  // 1. 월별 집행 추이 (천원 단위)
+  // Y축 축약 포맷 (원 단위)
+  const axisTickFmt = (v) => v >= 100000000 ? `${(v / 100000000).toFixed(1)}억` : v >= 10000 ? `${Math.round(v / 10000)}만` : v.toLocaleString();
+  const tooltipFmt = (value) => [`${Number(value).toLocaleString()}원`];
+
+  // 1. 월별 집행 추이 (원 단위)
   const monthlyTrend = MONTHS.map((name, idx) => {
     const month = idx + 1;
     const total = periodRecords
       .filter((r) => r.month === month)
       .reduce((sum, rec) => sum + rec.items.reduce((s, i) => s + (Number(i.amount) || 0), 0), 0);
-    return { name, 집행액: Math.round(total / 1000) };
+    return { name, 집행액: total };
   });
 
   // 누적 추이
@@ -60,7 +64,7 @@ export default function Statistics() {
     return { ...item, 누적: cumulative };
   });
 
-  // 2. 년도별 비교 (천원 단위)
+  // 2. 년도별 비교 (원 단위)
   const yearlyComparison = DEFAULT_YEARS.map((year) => {
     const total = companyFilteredRecords
       .filter((r) => r.year === year)
@@ -77,22 +81,22 @@ export default function Statistics() {
 
     return {
       name: `${year}년`,
-      예산: Math.round(yearPlan / 1000),
-      집행: Math.round(total / 1000),
+      예산: yearPlan,
+      집행: total,
       집행률: yearPlan > 0 ? ((total / yearPlan) * 100).toFixed(1) : 0,
     };
   });
 
-  // 3. 카테고리별 집행 (천원 단위)
+  // 3. 카테고리별 집행 (원 단위)
   const categoryBreakdown = BUDGET_CATEGORIES.map((cat) => {
     const total = periodRecords.reduce((sum, rec) => {
       const item = rec.items.find((i) => i.categoryId === cat.id);
       return sum + (item ? Number(item.amount) || 0 : 0);
     }, 0);
-    return { name: cat.shortName, value: Math.round(total / 1000) };
+    return { name: cat.shortName, value: total };
   });
 
-  // 4. 회사별 집행 (천원 단위)
+  // 4. 회사별 집행 (원 단위)
   const companyBreakdown = companies.map((comp) => {
     const total = executionRecords
       .filter((r) => {
@@ -103,11 +107,11 @@ export default function Statistics() {
       .reduce((sum, rec) => sum + rec.items.reduce((s, i) => s + (Number(i.amount) || 0), 0), 0);
     return {
       name: comp.name.replace(/\(주\)/g, '').trim(),
-      집행액: Math.round(total / 1000),
+      집행액: total,
     };
   });
 
-  // 5. 회사별 월 추이 (천원 단위)
+  // 5. 회사별 월 추이 (원 단위)
   const companyMonthly = MONTHS.map((name, idx) => {
     const month = idx + 1;
     const row = { name };
@@ -119,7 +123,7 @@ export default function Statistics() {
           return true;
         })
         .reduce((sum, rec) => sum + rec.items.reduce((s, i) => s + (Number(i.amount) || 0), 0), 0);
-      row[comp.name.replace(/\(주\)/g, '').trim()] = Math.round(total / 1000);
+      row[comp.name.replace(/\(주\)/g, '').trim()] = total;
     });
     return row;
   });
@@ -139,9 +143,9 @@ export default function Statistics() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v.toLocaleString()}`} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={axisTickFmt} />
               <Tooltip
-                formatter={(value, name) => [`${Number(value).toLocaleString()}천원`, name]}
+                formatter={(value, name) => [`${Number(value).toLocaleString()}원`, name]}
                 contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
               />
               <Area
@@ -155,7 +159,6 @@ export default function Statistics() {
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-[10px] text-gray-400 text-right mt-1">단위: 천원</p>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -166,17 +169,13 @@ export default function Statistics() {
               <BarChart data={yearlyComparison} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v.toLocaleString()}`} />
-                <Tooltip
-                  formatter={(value) => [`${Number(value).toLocaleString()}천원`]}
-                  contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
-                />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={axisTickFmt} />
+                <Tooltip formatter={tooltipFmt} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                 <Bar dataKey="예산" fill="#E0F7F5" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="집행" fill="#00B7AF" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-gray-400 text-right mt-1">단위: 천원</p>
         </Card>
 
         {/* 카테고리별 파이차트 */}
@@ -197,7 +196,7 @@ export default function Statistics() {
                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => [`${Number(value).toLocaleString()}천원`]} />
+                <Tooltip formatter={tooltipFmt} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
               </PieChart>
             </ResponsiveContainer>
@@ -209,23 +208,15 @@ export default function Statistics() {
       <Card title={`${periodLabel} 관계사별 집행 현황`}>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={companyBreakdown}
-              layout="vertical"
-              margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-            >
+            <BarChart data={companyBreakdown} layout="vertical" margin={{ top: 5, right: 30, left: 80, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v.toLocaleString()}`} />
+              <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={axisTickFmt} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
-              <Tooltip
-                formatter={(value) => [`${Number(value).toLocaleString()}천원`]}
-                contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
-              />
+              <Tooltip formatter={tooltipFmt} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
               <Bar dataKey="집행액" fill="#00B7AF" radius={[0, 4, 4, 0]} barSize={24} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-[10px] text-gray-400 text-right mt-1">단위: 천원</p>
       </Card>
 
       {/* 회사별 월 추이 */}
@@ -235,11 +226,8 @@ export default function Statistics() {
             <LineChart data={companyMonthly} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v.toLocaleString()}`} />
-              <Tooltip
-                formatter={(value) => [`${Number(value).toLocaleString()}천원`]}
-                contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
-              />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={axisTickFmt} />
+              <Tooltip formatter={tooltipFmt} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
               {companies.map((comp, idx) => (
                 <Line
@@ -254,19 +242,18 @@ export default function Statistics() {
             </LineChart>
           </ResponsiveContainer>
         </div>
-        <p className="text-[10px] text-gray-400 text-right mt-1">단위: 천원</p>
       </Card>
 
-      {/* 집행률 요약 테이블 (원 단위) */}
+      {/* 집행률 요약 테이블 */}
       <Card title="년도별 집행률 요약" noPad>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-4 py-3 text-left font-semibold">년도</th>
-                <th className="px-4 py-3 text-right font-semibold">예산(원)</th>
-                <th className="px-4 py-3 text-right font-semibold">집행(원)</th>
-                <th className="px-4 py-3 text-right font-semibold">잔액(원)</th>
+                <th className="px-4 py-3 text-right font-semibold">예산</th>
+                <th className="px-4 py-3 text-right font-semibold">집행</th>
+                <th className="px-4 py-3 text-right font-semibold">잔액</th>
                 <th className="px-4 py-3 text-right font-semibold">집행률</th>
                 <th className="px-4 py-3 text-left font-semibold w-32">진행도</th>
               </tr>
@@ -278,13 +265,9 @@ export default function Statistics() {
                 return (
                   <tr key={row.name} className="border-b border-gray-50">
                     <td className="px-4 py-3 font-medium">{row.name}</td>
-                    <td className="px-4 py-3 text-right">{formatCurrency(row.예산 * 1000)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-primary">
-                      {formatCurrency(row.집행 * 1000)}
-                    </td>
-                    <td className={`px-4 py-3 text-right ${remaining < 0 ? 'text-red-500' : ''}`}>
-                      {formatCurrency(remaining * 1000)}
-                    </td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(row.예산)}원</td>
+                    <td className="px-4 py-3 text-right font-medium text-primary">{formatCurrency(row.집행)}원</td>
+                    <td className={`px-4 py-3 text-right ${remaining < 0 ? 'text-red-500' : ''}`}>{formatCurrency(remaining)}원</td>
                     <td className="px-4 py-3 text-right font-medium">{formatPercent(rate)}</td>
                     <td className="px-4 py-3">
                       <div className="w-full bg-gray-100 rounded-full h-2">

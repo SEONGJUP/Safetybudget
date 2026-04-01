@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useBudget } from '@/lib/store';
-import { BUDGET_CATEGORIES, MONTHS } from '@/lib/constants';
+import { BUDGET_CATEGORIES, MONTHS, DEFAULT_YEARS } from '@/lib/constants';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -13,38 +13,27 @@ import { formatCurrency, formatPercent, formatFileSize, formatDate, generateId, 
 import CompanyLogo from '@/components/ui/CompanyLogo';
 import CompanySelect from '@/components/ui/CompanySelect';
 import Select from '@/components/ui/Select';
-import { Save, Send, Edit3, FileText, Paperclip, Download, Trash2, Eye, Check, X, Printer, List } from 'lucide-react';
+import { Save, Edit3, FileText, Paperclip, Download, Trash2, Eye, Check, X, Printer, List } from 'lucide-react';
 import DetailEntryModal from '@/components/execution/DetailEntryModal';
 
 export default function ExecutionRecord() {
-  const { data, selectedCompanyId, selectedPeriod, selectedYear, saveExecutionRecord, addEvidence, removeEvidence, updateReportStatus, addReport } = useBudget();
+  const {
+    data, isGeneral,
+    activeCompanies, activeBudgetPlans, activeExecutionRecords,
+    selectedCompanyId, selectedPeriod, setSelectedPeriod, selectedYear, setSelectedYear,
+    saveCurrentExecutionRecord, addEvidence, removeEvidence, updateReportStatus, addReport,
+  } = useBudget();
   const [editModal, setEditModal] = useState(null);
   const [monthModal, setMonthModal] = useState(null);
   const [evidenceModal, setEvidenceModal] = useState(false);
 
   if (!data) return null;
 
-  const { companies, executionRecords, budgetPlans, evidences, monthlyReports } = data;
-
+  const { evidences, monthlyReports } = data;
   const periodLabel = selectedPeriod === 'total' ? '전체기간' : `${selectedYear}년`;
 
-  // 예산 또는 실적이 있는 회사만 필터
-  const activeCompanies = companies.filter((comp) => {
-    const hasPlan = budgetPlans.some((bp) => {
-      if (bp.companyId !== comp.id) return false;
-      if (selectedPeriod === 'total') return bp.period === 'total';
-      return bp.period === 'yearly' && bp.year === selectedYear;
-    });
-    const hasExecution = executionRecords.some((r) => {
-      if (r.companyId !== comp.id) return false;
-      if (selectedPeriod === 'yearly') return r.year === selectedYear;
-      return true;
-    });
-    return hasPlan || hasExecution;
-  });
-
   // 기간 + 회사 필터
-  const filtered = executionRecords.filter((r) => {
+  const filtered = activeExecutionRecords.filter((r) => {
     if (selectedPeriod === 'yearly' && r.year !== selectedYear) return false;
     if (selectedCompanyId !== 'all' && r.companyId !== selectedCompanyId) return false;
     return true;
@@ -61,7 +50,7 @@ export default function ExecutionRecord() {
   }
 
   // 예산
-  const relevantPlans = budgetPlans.filter((bp) => {
+  const relevantPlans = activeBudgetPlans.filter((bp) => {
     if (selectedPeriod === 'total') {
       return bp.period === 'total' && (selectedCompanyId === 'all' || bp.companyId === selectedCompanyId);
     }
@@ -76,9 +65,9 @@ export default function ExecutionRecord() {
   const execRate = calcExecutionRate(yearExecuted, budgetTotal);
   const remaining = budgetTotal - yearExecuted;
 
-  // 회사별 집행 통계
-  const companyStats = activeCompanies.map((comp) => {
-    const compRecords = executionRecords.filter((r) => {
+  // 회사별 집행 통계 (기본)
+  const baseCompanyStats = activeCompanies.map((comp) => {
+    const compRecords = activeExecutionRecords.filter((r) => {
       if (r.companyId !== comp.id) return false;
       if (selectedPeriod === 'yearly' && r.year !== selectedYear) return false;
       return true;
@@ -87,13 +76,37 @@ export default function ExecutionRecord() {
       (sum, rec) => sum + rec.items.reduce((s, i) => s + (Number(i.amount) || 0), 0),
       0
     );
-    const compPlan = budgetPlans.filter((bp) => {
+    const compPlan = activeBudgetPlans.filter((bp) => {
       if (bp.companyId !== comp.id) return false;
       if (selectedPeriod === 'total') return bp.period === 'total';
       return bp.period === 'yearly' && bp.year === selectedYear;
     }).reduce((sum, bp) => sum + bp.items.reduce((s, i) => s + (Number(i.amount) || 0), 0), 0);
-
     return { company: comp, executed, budget: compPlan, rate: calcExecutionRate(executed, compPlan) };
+  });
+
+  // 원도급 포함 처리: includedInPrimary=true인 협력사 집행액을 원도급사에 합산
+  const includedSubs = activeCompanies.filter((c) => c.includedInPrimary);
+  const companyStats = baseCompanyStats.map((stat) => {
+    if (stat.company.type === 'primary' && includedSubs.length > 0) {
+      const extraExecuted = includedSubs.reduce((sum, sub) => {
+        const subStat = baseCompanyStats.find((s) => s.company.id === sub.id);
+        return sum + (subStat?.executed || 0);
+      }, 0);
+      const extraBudget = includedSubs.reduce((sum, sub) => {
+        const subStat = baseCompanyStats.find((s) => s.company.id === sub.id);
+        return sum + (subStat?.budget || 0);
+      }, 0);
+      const newExecuted = stat.executed + extraExecuted;
+      const newBudget = stat.budget + extraBudget;
+      return {
+        ...stat,
+        executed: newExecuted,
+        budget: newBudget,
+        rate: calcExecutionRate(newExecuted, newBudget),
+        includedSubNames: includedSubs.map((s) => s.name.replace(/\(주\)/g, '').trim()),
+      };
+    }
+    return stat;
   });
 
   // 증빙 파일 수
@@ -154,14 +167,14 @@ export default function ExecutionRecord() {
 
       {/* 회사별 집행 통계 카드 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        {companyStats.map(({ company, executed, budget, rate }) => (
+        {companyStats.map(({ company, executed, budget, rate, includedSubNames }) => (
           <div
             key={company.id}
             className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer"
             onClick={() => {
               const now = new Date();
               const currentMonth = now.getMonth() + 1;
-              const existingRecord = executionRecords.find(
+              const existingRecord = activeExecutionRecords.find(
                 (r) => r.companyId === company.id && r.year === selectedYear && r.month === currentMonth
               );
               setEditModal({
@@ -176,9 +189,17 @@ export default function ExecutionRecord() {
               <CompanyLogo company={company} size="md" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 text-sm truncate">{company.name}</p>
-                <p className="text-[10px] text-gray-400">
-                  {company.type === 'primary' ? '원도급사' : '협력사'}
-                </p>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <p className="text-[10px] text-gray-400">
+                    {company.type === 'primary' ? '원도급사' : '협력사'}
+                  </p>
+                  {company.includedInPrimary && (
+                    <span className="text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded-full font-medium">원도급 포함</span>
+                  )}
+                  {includedSubNames?.length > 0 && (
+                    <span className="text-[9px] bg-amber-50 text-amber-500 px-1 py-0.5 rounded-full">+협력사 포함</span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -206,8 +227,16 @@ export default function ExecutionRecord() {
         ))}
       </div>
 
-      {/* 월별 12개 버튼 — 넓으면 한줄 12개, 좁으면 두줄 6개 */}
-      <div className="grid grid-cols-6 xl:grid-cols-12 gap-1.5">
+      {/* 전체기간: 년도별 집행실적 요약 */}
+      {selectedPeriod === 'total' && <YearSummaryGrid
+        records={activeExecutionRecords}
+        plans={activeBudgetPlans}
+        selectedCompanyId={selectedCompanyId}
+        onSelectYear={(year) => { setSelectedPeriod('yearly'); setSelectedYear(year); }}
+      />}
+
+      {/* 월별 12개 버튼 — 전체기간 탭에서는 숨김 */}
+      {selectedPeriod === 'yearly' && <div className="grid grid-cols-6 xl:grid-cols-12 gap-1.5">
         {MONTHS.map((name, idx) => {
           const month = idx + 1;
           const total = monthlyTotals[month] || 0;
@@ -252,9 +281,10 @@ export default function ExecutionRecord() {
             </div>
           );
         })}
-      </div>
+      </div>}
 
-      {/* 카테고리별 누적 집행 (단위: 원) */}
+      {/* 항목별 누적 집행 — 전체기간 탭에서는 숨김 */}
+      {selectedPeriod !== 'yearly' ? null :
       <Card title={`${periodLabel} 항목별 누적 집행`} noPad>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -268,31 +298,55 @@ export default function ExecutionRecord() {
               </tr>
             </thead>
             <tbody>
-              {BUDGET_CATEGORIES.map((cat) => {
-                const monthAmounts = MONTHS.map((_, mIdx) => {
-                  const month = mIdx + 1;
-                  return filtered
-                    .filter((r) => r.month === month)
-                    .reduce((sum, rec) => {
-                      const item = rec.items.find((i) => i.categoryId === cat.id);
-                      return sum + (item ? Number(item.amount) || 0 : 0);
-                    }, 0);
-                });
-                const catTotal = monthAmounts.reduce((s, v) => s + v, 0);
-                return (
-                  <tr key={cat.id} className="border-b border-gray-50">
-                    <td className="px-4 py-2 font-medium whitespace-nowrap">{cat.shortName}</td>
-                    {monthAmounts.map((amt, mIdx) => (
-                      <td key={mIdx} className="px-2 py-2 text-right text-xs text-gray-600 tabular-nums">
-                        {amt > 0 ? formatCurrency(amt) : '-'}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 text-right font-bold text-sm tabular-nums">
-                      {formatCurrency(catTotal)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {isGeneral ? (
+                // 일반사업장: 커스텀 항목명 기준
+                [...new Set(filtered.flatMap((r) => r.items.map((i) => i.name)).filter(Boolean))].map((itemName) => {
+                  const monthAmounts = MONTHS.map((_, mIdx) => {
+                    const month = mIdx + 1;
+                    return filtered.filter((r) => r.month === month)
+                      .reduce((sum, rec) => {
+                        const item = rec.items.find((i) => i.name === itemName);
+                        return sum + (item ? Number(item.amount) || 0 : 0);
+                      }, 0);
+                  });
+                  const catTotal = monthAmounts.reduce((s, v) => s + v, 0);
+                  return (
+                    <tr key={itemName} className="border-b border-gray-50">
+                      <td className="px-4 py-2 font-medium whitespace-nowrap text-xs">{itemName}</td>
+                      {monthAmounts.map((amt, mIdx) => (
+                        <td key={mIdx} className="px-2 py-2 text-right text-xs text-gray-600 tabular-nums">
+                          {amt > 0 ? formatCurrency(amt) : '-'}
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 text-right font-bold text-sm tabular-nums">{formatCurrency(catTotal)}</td>
+                    </tr>
+                  );
+                })
+              ) : (
+                // 건설현장: 법정 카테고리 기준
+                BUDGET_CATEGORIES.map((cat) => {
+                  const monthAmounts = MONTHS.map((_, mIdx) => {
+                    const month = mIdx + 1;
+                    return filtered.filter((r) => r.month === month)
+                      .reduce((sum, rec) => {
+                        const item = rec.items.find((i) => i.categoryId === cat.id);
+                        return sum + (item ? Number(item.amount) || 0 : 0);
+                      }, 0);
+                  });
+                  const catTotal = monthAmounts.reduce((s, v) => s + v, 0);
+                  return (
+                    <tr key={cat.id} className="border-b border-gray-50">
+                      <td className="px-4 py-2 font-medium whitespace-nowrap">{cat.shortName}</td>
+                      {monthAmounts.map((amt, mIdx) => (
+                        <td key={mIdx} className="px-2 py-2 text-right text-xs text-gray-600 tabular-nums">
+                          {amt > 0 ? formatCurrency(amt) : '-'}
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 text-right font-bold text-sm tabular-nums">{formatCurrency(catTotal)}</td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
             <tfoot>
               <tr className="bg-gray-50 font-bold">
@@ -302,23 +356,22 @@ export default function ExecutionRecord() {
                     {monthlyTotals[mIdx + 1] > 0 ? formatCurrency(monthlyTotals[mIdx + 1]) : '-'}
                   </td>
                 ))}
-                <td className="px-3 py-2.5 text-right text-primary tabular-nums">
-                  {formatCurrency(yearExecuted)}
-                </td>
+                <td className="px-3 py-2.5 text-right text-primary tabular-nums">{formatCurrency(yearExecuted)}</td>
               </tr>
             </tfoot>
           </table>
         </div>
-      </Card>
+      </Card>}
 
       {/* 월 상세 보기 모달 (피벗 + 보고서 기능) */}
       {monthModal && (
         <MonthViewModal
+          isGeneral={isGeneral}
           periodLabel={periodLabel}
           month={monthModal.month}
           records={monthModal.records}
-          companies={companies}
-          executionRecords={executionRecords}
+          companies={activeCompanies}
+          executionRecords={activeExecutionRecords}
           report={getMonthReport(monthModal.month)}
           selectedYear={selectedYear}
           onEdit={(record) => {
@@ -330,7 +383,7 @@ export default function ExecutionRecord() {
             setEditModal({
               month: monthModal.month,
               isNew: true,
-              forCompany: companies.find((c) => c.id === companyId) || companies[0],
+              forCompany: activeCompanies.find((c) => c.id === companyId) || activeCompanies[0],
             });
           }}
           onCreateReport={() => handleCreateReport(monthModal.month)}
@@ -344,14 +397,16 @@ export default function ExecutionRecord() {
       {/* 편집 모달 */}
       {editModal && (
         <ExecutionEditModal
+          isGeneral={isGeneral}
           year={selectedYear}
           month={editModal.month}
           record={editModal.record}
           isNew={editModal.isNew}
-          companies={companies}
-          selectedCompanyId={editModal.forCompany?.id || (selectedCompanyId !== 'all' ? selectedCompanyId : companies[0]?.id)}
+          companies={activeCompanies}
+          budgetPlans={activeBudgetPlans}
+          selectedCompanyId={editModal.forCompany?.id || (selectedCompanyId !== 'all' ? selectedCompanyId : activeCompanies[0]?.id)}
           onSave={(record, newEvidences) => {
-            saveExecutionRecord(record);
+            saveCurrentExecutionRecord(record);
             if (newEvidences?.length > 0) {
               newEvidences.forEach((ev) => addEvidence(ev));
             }
@@ -364,8 +419,8 @@ export default function ExecutionRecord() {
       {/* 증빙파일 목록 모달 */}
       {evidenceModal && (
         <EvidenceListModal
-          evidences={evidences}
-          companies={companies}
+          evidences={evidences || []}
+          companies={activeCompanies}
           selectedPeriod={selectedPeriod}
           selectedYear={selectedYear}
           selectedCompanyId={selectedCompanyId}
@@ -377,24 +432,111 @@ export default function ExecutionRecord() {
   );
 }
 
+/* ─── 연도별 집행실적 요약 그리드 (전체기간 탭) ─── */
+function YearSummaryGrid({ records, plans, selectedCompanyId, onSelectYear }) {
+  const years = [...new Set(records.map((r) => r.year))].sort();
+
+  if (years.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 px-5 py-8 text-center text-gray-400 text-sm">
+        등록된 집행실적이 없습니다.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-400 px-1">연도를 클릭하면 해당 연도의 집행실적을 볼 수 있습니다.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {years.map((year) => {
+          const yearRecords = records.filter((r) => {
+            if (selectedCompanyId !== 'all' && r.companyId !== selectedCompanyId) return false;
+            return r.year === year;
+          });
+          const executed = yearRecords.reduce(
+            (sum, rec) => sum + rec.items.reduce((s, i) => s + (Number(i.amount) || 0), 0),
+            0
+          );
+          const yearPlans = plans.filter((bp) => {
+            if (bp.period !== 'yearly' || bp.year !== year) return false;
+            if (selectedCompanyId !== 'all' && bp.companyId !== selectedCompanyId) return false;
+            return true;
+          });
+          const budget = yearPlans.reduce(
+            (sum, bp) => sum + bp.items.reduce((s, i) => s + (Number(i.amount) || 0), 0),
+            0
+          );
+          const rate = budget > 0 ? (executed / budget) * 100 : 0;
+          const remaining = budget - executed;
+
+          return (
+            <div
+              key={year}
+              className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md hover:border-primary/40 transition-all cursor-pointer"
+              onClick={() => onSelectYear(year)}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-lg font-extrabold text-gray-800">{year}년</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${rate > 100 ? 'bg-red-50 text-red-500' : rate > 80 ? 'bg-amber-50 text-amber-600' : 'bg-primary-light text-primary'}`}>
+                  {formatPercent(rate)}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">집행액</span>
+                  <span className="font-extrabold text-gray-900">{formatCurrency(executed)}원</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">예산액</span>
+                  <span className="text-gray-500">{formatCurrency(budget)}원</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">잔액</span>
+                  <span className={remaining < 0 ? 'text-red-500 font-medium' : 'text-gray-500'}>{formatCurrency(remaining)}원</span>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${rate > 100 ? 'bg-red-400' : rate > 80 ? 'bg-amber-400' : 'bg-primary'}`}
+                      style={{ width: `${Math.min(rate, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ─── 월 상세 보기 모달 (피벗 + 보고서 기능) ─── */
-function MonthViewModal({ periodLabel, month, records, companies, executionRecords, report, selectedYear, onEdit, onNewRecord, onCreateReport, onSubmitReport, onApproveReport, onRejectReport, onClose }) {
+function MonthViewModal({ isGeneral, periodLabel, month, records, companies, executionRecords, report, selectedYear, onEdit, onNewRecord, onCreateReport, onSubmitReport, onApproveReport, onRejectReport, onClose }) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const recordCompanies = companies.filter((c) => records.some((r) => r.companyId === c.id));
   const noRecordCompanies = companies.filter((c) => !records.some((r) => r.companyId === c.id));
 
-  const matrixData = BUDGET_CATEGORIES.map((cat) => {
-    const row = { category: cat };
+  // 항목명 목록 (건설: BUDGET_CATEGORIES, 일반: 레코드에서 수집)
+  const itemKeys = isGeneral
+    ? [...new Set(records.flatMap((r) => r.items.map((i) => i.name)).filter(Boolean))]
+    : BUDGET_CATEGORIES.map((c) => c.id);
+
+  const matrixData = itemKeys.map((key) => {
+    const row = { key };
     let rowTotal = 0;
     recordCompanies.forEach((comp) => {
       const record = records.find((r) => r.companyId === comp.id);
-      const item = record?.items.find((i) => i.categoryId === cat.id);
+      const item = isGeneral
+        ? record?.items.find((i) => i.name === key)
+        : record?.items.find((i) => i.categoryId === key);
       const amount = item ? Number(item.amount) || 0 : 0;
       row[comp.id] = amount;
       rowTotal += amount;
     });
     row.total = rowTotal;
+    if (!isGeneral) row.category = BUDGET_CATEGORIES.find((c) => c.id === key);
     return row;
   });
 
@@ -451,7 +593,7 @@ function MonthViewModal({ periodLabel, month, records, companies, executionRecor
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">코드</th>
+                  {!isGeneral && <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">코드</th>}
                   <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">항목명</th>
                   {recordCompanies.map((comp) => (
                     <th key={comp.id} className="px-3 py-2.5 text-right text-xs min-w-[100px]">
@@ -466,9 +608,11 @@ function MonthViewModal({ periodLabel, month, records, companies, executionRecor
               </thead>
               <tbody>
                 {matrixData.map((row) => (
-                  <tr key={row.category.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="px-3 py-2 text-xs text-gray-400">{row.category.code}</td>
-                    <td className="px-3 py-2 text-xs font-medium whitespace-nowrap">{row.category.shortName}</td>
+                  <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50/50">
+                    {!isGeneral && <td className="px-3 py-2 text-xs text-gray-400">{row.category?.code}</td>}
+                    <td className="px-3 py-2 text-xs font-medium whitespace-nowrap">
+                      {isGeneral ? row.key : row.category?.shortName}
+                    </td>
                     {recordCompanies.map((comp) => (
                       <td key={comp.id} className="px-3 py-2 text-right text-xs tabular-nums">
                         {row[comp.id] > 0 ? (
@@ -528,9 +672,6 @@ function MonthViewModal({ periodLabel, month, records, companies, executionRecor
                 <>
                   <Button size="sm" variant="outline" icon={Eye} onClick={() => setPreviewOpen(true)}>
                     미리보기
-                  </Button>
-                  <Button size="sm" icon={Send} onClick={() => onSubmitReport(report.id)}>
-                    검토요청
                   </Button>
                 </>
               ) : report.status === 'submitted' ? (
@@ -669,26 +810,57 @@ function ReportPreviewModal({ year, month, report, executionRecords, companies, 
 }
 
 /* ─── 집행실적 편집 모달 (증빙 첨부 포함) ─── */
-function ExecutionEditModal({ year, month, record, isNew, companies, selectedCompanyId, onSave, onClose }) {
+function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, budgetPlans, selectedCompanyId, onSave, onClose }) {
   const { data } = useBudget();
-  const initialItems = record
-    ? record.items.map((item) => ({ ...item, details: item.details || [], orgInfo: item.orgInfo || null, evidences: item.evidences || [] }))
-    : BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '', details: [], orgInfo: null, evidences: [] }));
+  const initCompanyId = record?.companyId || selectedCompanyId || companies[0]?.id;
 
-  const [items, setItems] = useState(initialItems);
-  const [companyId, setCompanyId] = useState(
-    record?.companyId || selectedCompanyId || companies[0]?.id
-  );
+  // 일반사업장: 예산 항목명에서 템플릿 생성
+  const getGeneralInitItems = (compId) => {
+    const plan = budgetPlans?.find((bp) => bp.companyId === compId && bp.year === year);
+    if (plan?.items?.length) return plan.items.map((i) => ({ id: i.id, name: i.name, amount: 0, note: '' }));
+    return [{ id: 'new-1', name: '안전관리비', amount: 0, note: '' }];
+  };
+
+  const getInitItems = (compId) => {
+    if (record) {
+      return isGeneral
+        ? record.items.map((i) => ({ ...i }))
+        : record.items.map((item) => ({ ...item, details: item.details || [], orgInfo: item.orgInfo || null, evidences: item.evidences || [] }));
+    }
+    if (isGeneral) return getGeneralInitItems(compId);
+    return BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '', details: [], orgInfo: null, evidences: [] }));
+  };
+
+  const [companyId, setCompanyId] = useState(initCompanyId);
+  const [items, setItems] = useState(() => getInitItems(initCompanyId));
   const [categoryId, setCategoryId] = useState('all');
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [detailModalOpen, setDetailModalOpen] = useState(null);
 
-  const handleAmountChange = (catId, value) => {
+  // 회사 변경 시 항목 재초기화 (일반사업장 신규 등록 시)
+  const handleCompanyChange = (newCompId) => {
+    setCompanyId(newCompId);
+    if (isGeneral && isNew) setItems(getGeneralInitItems(newCompId));
+  };
+
+  const handleAmountChange = (key, value) => {
     setItems((prev) =>
       prev.map((item) =>
-        item.categoryId === catId ? { ...item, amount: value } : item
+        isGeneral ? (item.name === key ? { ...item, amount: value } : item)
+                  : (item.categoryId === key ? { ...item, amount: value } : item)
       )
     );
+  };
+
+  // 일반사업장: 항목 추가
+  const handleAddItem = () => {
+    setItems((prev) => [...prev, { id: `new-${Date.now()}`, name: '', amount: 0, note: '' }]);
+  };
+  const handleItemNameChange = (idx, name) => {
+    setItems((prev) => prev.map((item, i) => i === idx ? { ...item, name } : item));
+  };
+  const handleRemoveItem = (idx) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
@@ -742,7 +914,7 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
         {isNew && (
           <CompanySelect
             value={companyId}
-            onChange={setCompanyId}
+            onChange={handleCompanyChange}
             companies={companies}
             label="회사 선택"
           />
@@ -752,53 +924,83 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-3 py-2 text-left font-semibold text-gray-600">항목</th>
-              <th className="px-3 py-2 text-center font-semibold text-gray-600 w-16">상세</th>
+              {!isGeneral && <th className="px-3 py-2 text-center font-semibold text-gray-600 w-16">상세</th>}
               <th className="px-3 py-2 text-right font-semibold text-gray-600 w-44">집행액(원)</th>
+              {isGeneral && <th className="w-8" />}
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
-              const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
-              const detailCount = item.details?.length || 0;
-              const evCount = item.evidences?.length || 0;
-              return (
-                <tr key={item.categoryId} className="border-b border-gray-50">
+            {isGeneral ? (
+              items.map((item, idx) => (
+                <tr key={idx} className="border-b border-gray-50">
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
-                      {detailCount > 0 && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
-                      )}
-                      {evCount > 0 && (
-                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
-                          <Paperclip size={8} />{evCount}
-                        </span>
-                      )}
-                      <span className="text-xs">{cat?.shortName}</span>
-                    </div>
-                  </td>
-                  <td className="px-1 py-2 text-center">
-                    <button
-                      onClick={() => setDetailModalOpen(item.categoryId)}
-                      className="p-1.5 rounded-md transition-colors bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary"
-                      title="상세내역 입력"
-                    >
-                      <List size={13} />
-                    </button>
-                  </td>
-                  <td className="px-3 py-2">
-                    <CurrencyInput
-                      value={item.amount}
-                      onChange={(val) => handleAmountChange(item.categoryId, val)}
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => handleItemNameChange(idx, e.target.value)}
+                      placeholder="항목명"
+                      className="w-full text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </td>
+                  <td className="px-3 py-2">
+                    <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
+                  </td>
+                  <td className="px-1 py-2 text-center">
+                    <button onClick={() => handleRemoveItem(idx)} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors">
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
                 </tr>
-              );
-            })}
+              ))
+            ) : (
+              items.map((item) => {
+                const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
+                const detailCount = item.details?.length || 0;
+                const evCount = item.evidences?.length || 0;
+                return (
+                  <tr key={item.categoryId} className="border-b border-gray-50">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        {detailCount > 0 && (
+                          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
+                        )}
+                        {evCount > 0 && (
+                          <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+                            <Paperclip size={8} />{evCount}
+                          </span>
+                        )}
+                        <span className="text-xs">{cat?.shortName}</span>
+                      </div>
+                    </td>
+                    <td className="px-1 py-2 text-center">
+                      <button
+                        onClick={() => setDetailModalOpen(item.categoryId)}
+                        className="p-1.5 rounded-md transition-colors bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary"
+                        title="상세내역 입력"
+                      >
+                        <List size={13} />
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
+                      <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.categoryId, val)} />
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
           <tfoot>
             <tr className="bg-primary-light font-bold">
-              <td className="px-3 py-2.5" colSpan={2}>합계</td>
+              <td className="px-3 py-2.5" colSpan={isGeneral ? 1 : 2}>
+                {isGeneral && (
+                  <button onClick={handleAddItem} className="text-xs text-primary hover:underline flex items-center gap-1">
+                    <span>+ 항목 추가</span>
+                  </button>
+                )}
+                {!isGeneral && '합계'}
+              </td>
               <td className="px-3 py-2.5 text-right text-primary">{formatCurrency(total)}원</td>
+              {isGeneral && <td />}
             </tr>
           </tfoot>
         </table>
@@ -826,8 +1028,7 @@ function ExecutionEditModal({ year, month, record, isNew, companies, selectedCom
 
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button variant="outline" icon={Save} onClick={() => handleSave('draft')}>임시저장</Button>
-          <Button icon={Send} onClick={() => handleSave('submitted')}>검토요청</Button>
+          <Button icon={Save} onClick={() => handleSave('draft')}>저장</Button>
         </div>
       </div>
 
