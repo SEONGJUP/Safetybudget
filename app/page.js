@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { BudgetProvider, useBudget } from '@/lib/store';
-import { TABS, DEFAULT_YEARS } from '@/lib/constants';
+import { TABS, ASIDE_TABS, DEFAULT_YEARS } from '@/lib/constants';
 import TabNav from '@/components/ui/TabNav';
 import BudgetOverview from '@/components/tabs/BudgetOverview';
 import BudgetPlan from '@/components/tabs/BudgetPlan';
@@ -217,7 +217,7 @@ function AppContent() {
         </div>
       </header>
 
-      <TabNav tabs={TABS} activeTab={activeTab} onChange={setActiveTab} maxWidth="1280px" />
+      <TabNav tabs={TABS} asideTabs={ASIDE_TABS} activeTab={activeTab} onChange={setActiveTab} maxWidth="1280px" />
 
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-[1280px] mx-auto p-4 sm:p-6 space-y-4">
