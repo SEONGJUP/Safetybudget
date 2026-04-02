@@ -7,6 +7,7 @@ import {
   Upload,
   BarChart3,
   Building2,
+  Code2,
 } from 'lucide-react';
 
 const ICONS = {
@@ -17,6 +18,7 @@ const ICONS = {
   Upload,
   BarChart3,
   Building2,
+  Code2,
 };
 
 export default function TabNav({ tabs, activeTab, onChange, maxWidth }) {

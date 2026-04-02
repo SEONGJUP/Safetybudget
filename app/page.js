@@ -8,6 +8,7 @@ import BudgetPlan from '@/components/tabs/BudgetPlan';
 import ExecutionRecord from '@/components/tabs/ExecutionRecord';
 import Statistics from '@/components/tabs/Statistics';
 import CompanyManagement from '@/components/tabs/CompanyManagement';
+import DevGuide from '@/components/tabs/DevGuide';
 import Tutorial from '@/components/ui/Tutorial';
 import { HelpCircle, HardHat, Building } from 'lucide-react';
 
@@ -183,6 +184,7 @@ function AppContent() {
       case 'execution': return <ExecutionRecord />;
       case 'statistics': return <Statistics />;
       case 'companies': return <CompanyManagement />;
+      case 'devguide': return <DevGuide />;
       default: return <BudgetOverview />;
     }
   };
