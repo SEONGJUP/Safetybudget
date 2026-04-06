@@ -447,6 +447,7 @@ export default function ExecutionRecord() {
           records={monthModal.records}
           companies={activeCompanies}
           executionRecords={activeExecutionRecords}
+          budgetPlans={activeBudgetPlans}
           report={getMonthReport(monthModal.month)}
           selectedYear={selectedYear}
           onEdit={(record) => {
@@ -591,7 +592,7 @@ function YearSummaryGrid({ records, plans, selectedCompanyId, onSelectYear }) {
 }
 
 /* ─── 월 상세 보기 모달 (피벗 + 보고서 기능) ─── */
-function MonthViewModal({ isGeneral, periodLabel, month, records, companies, executionRecords, report, selectedYear, onEdit, onNewRecord, onCreateReport, onSubmitReport, onApproveReport, onRejectReport, onClose }) {
+function MonthViewModal({ isGeneral, periodLabel, month, records, companies, executionRecords, budgetPlans, report, selectedYear, onEdit, onNewRecord, onCreateReport, onSubmitReport, onApproveReport, onRejectReport, onClose }) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const recordCompanies = companies.filter((c) => records.some((r) => r.companyId === c.id));
@@ -601,6 +602,19 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
   const itemKeys = isGeneral
     ? [...new Set(records.flatMap((r) => r.items.map((i) => i.name)).filter(Boolean))]
     : BUDGET_CATEGORIES.map((c) => c.id);
+
+  // 년도 예산 합계 (전체 회사 합산)
+  const yearPlans = (budgetPlans || []).filter((bp) => bp.period === 'yearly' && bp.year === selectedYear);
+  const getYearBudget = (key) => {
+    return yearPlans.reduce((sum, bp) => {
+      const item = isGeneral
+        ? bp.items?.find((i) => i.name === key)
+        : bp.items?.find((i) => i.categoryId === key);
+      return sum + (Number(item?.amount) || 0);
+    }, 0);
+  };
+  const yearBudgetTotal = yearPlans.reduce((s, bp) => s + bp.items.reduce((ss, i) => ss + (Number(i.amount) || 0), 0), 0);
+  const showBudgetCol = yearBudgetTotal > 0;
 
   const matrixData = itemKeys.map((key) => {
     const row = { key };
@@ -615,6 +629,7 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
       rowTotal += amount;
     });
     row.total = rowTotal;
+    row.yearBudget = getYearBudget(key);
     if (!isGeneral) row.category = BUDGET_CATEGORIES.find((c) => c.id === key);
     return row;
   });
@@ -674,6 +689,11 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
                 <tr className="border-b border-gray-200 bg-gray-50">
                   {!isGeneral && <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">코드</th>}
                   <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">항목명</th>
+                  {showBudgetCol && (
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-600 bg-amber-50/60 min-w-[90px] whitespace-nowrap">
+                      {selectedYear}년 예산
+                    </th>
+                  )}
                   {recordCompanies.map((comp) => (
                     <th key={comp.id} className="px-3 py-2.5 text-right text-xs min-w-[100px]">
                       <div className="flex items-center justify-end gap-1">
@@ -686,30 +706,44 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
                 </tr>
               </thead>
               <tbody>
-                {matrixData.map((row) => (
-                  <tr key={row.key} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    {!isGeneral && <td className="px-3 py-2 text-xs text-gray-400">{row.category?.code}</td>}
-                    <td className="px-3 py-2 text-xs font-medium whitespace-nowrap">
-                      {isGeneral ? row.key : row.category?.shortName}
-                    </td>
-                    {recordCompanies.map((comp) => (
-                      <td key={comp.id} className="px-3 py-2 text-right text-xs tabular-nums">
-                        {row[comp.id] > 0 ? (
-                          <span className="text-gray-700">{formatCurrency(row[comp.id])}</span>
-                        ) : (
-                          <span className="text-gray-300">-</span>
-                        )}
+                {matrixData.map((row) => {
+                  const isOver = showBudgetCol && row.yearBudget > 0 && row.total > row.yearBudget;
+                  return (
+                    <tr key={row.key} className={`border-b border-gray-50 hover:bg-gray-50/50 ${isOver ? 'bg-red-50/20' : ''}`}>
+                      {!isGeneral && <td className="px-3 py-2 text-xs text-gray-400">{row.category?.code}</td>}
+                      <td className="px-3 py-2 text-xs font-medium whitespace-nowrap">
+                        {isGeneral ? row.key : row.category?.shortName}
                       </td>
-                    ))}
-                    <td className="px-3 py-2 text-right text-xs font-bold text-primary tabular-nums bg-primary-light/10">
-                      {formatCurrency(row.total)}
-                    </td>
-                  </tr>
-                ))}
+                      {showBudgetCol && (
+                        <td className="px-3 py-2 text-right text-xs tabular-nums text-amber-700 bg-amber-50/40 font-medium">
+                          {row.yearBudget > 0 ? formatCurrency(row.yearBudget) : <span className="text-gray-300">-</span>}
+                        </td>
+                      )}
+                      {recordCompanies.map((comp) => (
+                        <td key={comp.id} className="px-3 py-2 text-right text-xs tabular-nums">
+                          {row[comp.id] > 0 ? (
+                            <span className="text-gray-700">{formatCurrency(row[comp.id])}</span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                      ))}
+                      <td className={`px-3 py-2 text-right text-xs font-bold tabular-nums bg-primary-light/10 ${isOver ? 'text-red-500' : 'text-primary'}`}>
+                        {formatCurrency(row.total)}
+                        {isOver && <span className="block text-[9px] font-normal text-red-400">초과</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
                   <td className="px-3 py-2.5 text-xs" colSpan={isGeneral ? 1 : 2}>합계 (원)</td>
+                  {showBudgetCol && (
+                    <td className="px-3 py-2.5 text-right text-xs tabular-nums text-amber-700 bg-amber-50/40 font-bold">
+                      {formatCurrency(yearBudgetTotal)}
+                    </td>
+                  )}
                   {recordCompanies.map((comp) => (
                     <td key={comp.id} className="px-3 py-2.5 text-right text-xs tabular-nums">
                       {formatCurrency(companyTotals[comp.id])}
