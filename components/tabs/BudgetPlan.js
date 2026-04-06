@@ -684,6 +684,11 @@ function ConstructionEditModal({ plan, company, totalPlan, periodFilter, yearFil
                     <td className="px-3 py-2">
                       <CurrencyInput value={item.amount}
                         onChange={(val) => setItems((prev) => prev.map((i) => i.categoryId === item.categoryId ? { ...i, amount: val } : i))} />
+                      {overTotal && (
+                        <p className="text-[10px] text-red-500 mt-0.5 tabular-nums">
+                          전체예산 초과 +{formatCurrency(yearAmt - totalAmt)}원
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <input type="text" value={item.note || ''} placeholder="비고"
