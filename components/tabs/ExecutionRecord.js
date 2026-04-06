@@ -166,111 +166,6 @@ export default function ExecutionRecord() {
         </button>
       </div>
 
-      {/* 집행실적 등록/조회 섹션 — 월 선택 + 업체별 등록 */}
-      {selectedPeriod === 'yearly' && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          {/* 섹션 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 bg-primary/5 border-b border-primary/10">
-            <div className="flex items-center gap-2">
-              <span className="w-1 h-4 bg-primary rounded-full shrink-0" />
-              <h3 className="text-sm font-bold text-gray-700">월별 집행실적 등록</h3>
-            </div>
-            <span className="text-xs text-gray-400">월 선택 후 업체 버튼을 눌러 집행실적을 등록하세요</span>
-          </div>
-
-          {/* 월 선택 탭 */}
-          <div className="flex overflow-x-auto border-b border-gray-100 px-3 py-2 gap-1">
-            {MONTHS.map((name, idx) => {
-              const m = idx + 1;
-              const hasRec = activeExecutionRecords.some(
-                (r) => r.companyId && r.year === selectedYear && r.month === m
-              );
-              const isSelected = activeMonth === m;
-              return (
-                <button
-                  key={m}
-                  onClick={() => setActiveMonth(m)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    isSelected
-                      ? 'bg-primary text-white shadow-sm'
-                      : hasRec
-                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600'
-                  }`}
-                >
-                  {m}월
-                  {hasRec && !isSelected && <span className="ml-1 inline-block w-1 h-1 rounded-full bg-primary align-middle" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 선택된 월의 업체별 등록 카드 */}
-          <div className="p-4">
-            <p className="text-xs text-gray-500 mb-3">
-              <strong className="text-primary">{activeMonth}월</strong> 집행실적 — 업체를 선택하여 등록 또는 수정하세요
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {companyStats.map(({ company, executed, budget, rate, includedSubNames }) => {
-                const monthRecord = activeExecutionRecords.find(
-                  (r) => r.companyId === company.id && r.year === selectedYear && r.month === activeMonth
-                );
-                const monthAmt = monthRecord
-                  ? monthRecord.items.reduce((s, i) => s + (Number(i.amount) || 0), 0)
-                  : 0;
-                const hasMonthRecord = !!monthRecord;
-                return (
-                  <div key={company.id} className="bg-gray-50 rounded-xl border border-gray-100 p-3 flex flex-col gap-2.5">
-                    {/* 회사 정보 */}
-                    <div className="flex items-center gap-2">
-                      <CompanyLogo company={company} size="md" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 text-sm truncate">{company.name}</p>
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <p className="text-[10px] text-gray-400">{company.type === 'primary' ? '원도급사' : '협력사'}</p>
-                          {company.includedInPrimary && (
-                            <span className="text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded-full font-medium">원도급 포함</span>
-                          )}
-                          {includedSubNames?.length > 0 && (
-                            <span className="text-[9px] bg-amber-50 text-amber-500 px-1 py-0.5 rounded-full">+협력사 포함</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 누적 집행 현황 */}
-                    <div className="flex justify-between text-xs border-t border-gray-100 pt-2">
-                      <span className="text-gray-400">{periodLabel} 누계</span>
-                      <span className="font-bold text-gray-700">{formatCurrency(executed)}원 <span className="text-gray-400 font-normal">({formatPercent(rate)})</span></span>
-                    </div>
-
-                    {/* 이번 월 집행 현황 */}
-                    <div className={`flex justify-between text-xs rounded-lg px-2.5 py-1.5 ${hasMonthRecord ? 'bg-primary/8 border border-primary/20' : 'bg-white border border-dashed border-gray-200'}`}>
-                      <span className={hasMonthRecord ? 'text-primary font-medium' : 'text-gray-400'}>{activeMonth}월 집행</span>
-                      <span className={hasMonthRecord ? 'font-bold text-primary' : 'text-gray-300'}>
-                        {hasMonthRecord ? `${formatCurrency(monthAmt)}원` : '미등록'}
-                      </span>
-                    </div>
-
-                    {/* 등록/수정 버튼 */}
-                    <button
-                      onClick={() => setEditModal({ month: activeMonth, record: monthRecord || null, isNew: !monthRecord, forCompany: company })}
-                      className={`w-full py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        hasMonthRecord
-                          ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          : 'bg-primary text-white hover:bg-primary/90 shadow-sm'
-                      }`}
-                    >
-                      {hasMonthRecord ? `${activeMonth}월 수정` : `${activeMonth}월 등록`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 전체기간: 업체별 통계 카드만 (등록 불가) */}
       {selectedPeriod === 'total' && (
         <div className="space-y-2">
@@ -326,66 +221,130 @@ export default function ExecutionRecord() {
         onSelectYear={(year) => { setSelectedPeriod('yearly'); setSelectedYear(year); }}
       />}
 
-      {/* 월별 집행 현황 그리드 — 전체기간 탭에서는 숨김 */}
+      {/* 년도별: 월 선택 + 등록 통합 패널 */}
       {selectedPeriod === 'yearly' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 px-1">
-            <span className="w-1 h-4 bg-gray-300 rounded-full shrink-0" />
-            <h3 className="text-sm font-bold text-gray-700">월별 집행 현황</h3>
-            <span className="text-xs text-gray-400">— 클릭하여 상세 내역 조회</span>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <span className="w-1 h-4 bg-primary rounded-full shrink-0" />
+              <h3 className="text-sm font-bold text-gray-700">월별 집행현황 · 등록</h3>
+            </div>
+            <span className="text-xs text-gray-400">월 선택 → 업체 등록/수정</span>
           </div>
-          <div className="grid grid-cols-6 xl:grid-cols-12 gap-1.5">
-          {MONTHS.map((name, idx) => {
-            const month = idx + 1;
-            const total = monthlyTotals[month] || 0;
-            const records = getMonthRecords(month);
-            const hasRecords = records.length > 0;
-            const allApproved = records.length > 0 && records.every((r) => r.status === 'approved');
-            const hasDraft = records.some((r) => r.status === 'draft');
-            const report = getMonthReport(month);
-            const isActive = activeMonth === month;
 
-            return (
-              <div
-                key={month}
-                className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-between py-2.5 transition-all cursor-pointer hover:shadow-lg hover:scale-[1.03] ${
-                  isActive
-                    ? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/30'
-                    : hasRecords
-                    ? allApproved
-                      ? 'border-emerald-300 bg-emerald-50/50 shadow-sm'
-                      : hasDraft
-                      ? 'border-amber-300 bg-amber-50/50 shadow-sm'
-                      : 'border-blue-300 bg-blue-50/50 shadow-sm'
-                    : 'border-gray-150 bg-white hover:border-primary/40'
-                }`}
-                onClick={() => {
-                  setActiveMonth(month);
-                  if (hasRecords) setMonthModal({ month, records });
-                }}
-              >
-                <span className={`text-base font-extrabold ${
-                  isActive ? 'text-primary' :
-                  hasRecords
-                    ? allApproved ? 'text-emerald-600' : hasDraft ? 'text-amber-600' : 'text-blue-600'
-                    : 'text-gray-500'
-                }`}>{month}월</span>
-                <span className={`text-[10px] leading-tight text-center ${total > 0 ? 'text-gray-600 font-semibold' : 'text-gray-300'}`}>
-                  {total > 0 ? <>{formatCurrency(total)}<span className="text-gray-400 ml-px">원</span></> : '미등록'}
-                </span>
-                <div className="h-2.5 flex items-center justify-center">
-                  {report && (
-                    <div className={`w-2.5 h-2.5 rounded-full ${
-                      report.status === 'approved' ? 'bg-emerald-500' :
-                      report.status === 'submitted' ? 'bg-amber-500' :
-                      report.status === 'rejected' ? 'bg-red-500' :
-                      'bg-blue-400'
-                    }`} />
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {/* 월 그리드 (네비게이션) */}
+          <div className="p-3 border-b border-gray-50">
+            <div className="grid grid-cols-6 xl:grid-cols-12 gap-1.5">
+              {MONTHS.map((name, idx) => {
+                const month = idx + 1;
+                const total = monthlyTotals[month] || 0;
+                const records = getMonthRecords(month);
+                const hasRecords = records.length > 0;
+                const allApproved = records.length > 0 && records.every((r) => r.status === 'approved');
+                const hasDraft = records.some((r) => r.status === 'draft');
+                const report = getMonthReport(month);
+                const isActive = activeMonth === month;
+                return (
+                  <div
+                    key={month}
+                    className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-between py-2.5 transition-all cursor-pointer hover:shadow-md hover:scale-[1.03] ${
+                      isActive
+                        ? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/30'
+                        : hasRecords
+                        ? allApproved
+                          ? 'border-emerald-300 bg-emerald-50/50 shadow-sm'
+                          : hasDraft
+                          ? 'border-amber-300 bg-amber-50/50 shadow-sm'
+                          : 'border-blue-300 bg-blue-50/50 shadow-sm'
+                        : 'border-gray-150 bg-gray-50 hover:border-primary/40 hover:bg-primary/5'
+                    }`}
+                    onClick={() => {
+                      setActiveMonth(month);
+                      if (hasRecords) setMonthModal({ month, records });
+                    }}
+                  >
+                    <span className={`text-base font-extrabold ${
+                      isActive ? 'text-primary' :
+                      hasRecords
+                        ? allApproved ? 'text-emerald-600' : hasDraft ? 'text-amber-600' : 'text-blue-600'
+                        : 'text-gray-400'
+                    }`}>{month}월</span>
+                    <span className={`text-[10px] leading-tight text-center tabular-nums ${total > 0 ? 'text-gray-600 font-semibold' : 'text-gray-300'}`}>
+                      {total > 0 ? <>{formatCurrency(total)}<span className="text-gray-400 ml-px">원</span></> : '미등록'}
+                    </span>
+                    <div className="h-2.5 flex items-center justify-center">
+                      {report && (
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          report.status === 'approved' ? 'bg-emerald-500' :
+                          report.status === 'submitted' ? 'bg-amber-500' :
+                          report.status === 'rejected' ? 'bg-red-500' :
+                          'bg-blue-400'
+                        }`} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 선택된 월 — 업체별 등록/수정 */}
+          <div className="p-4 bg-primary/3">
+            <p className="text-xs text-gray-500 mb-3 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 bg-primary text-white rounded-full text-[10px] font-bold shrink-0">{activeMonth}</span>
+              월 집행실적 — 업체를 선택하여 등록 또는 수정하세요
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {companyStats.map(({ company, executed, budget, rate, includedSubNames }) => {
+                const monthRecord = activeExecutionRecords.find(
+                  (r) => r.companyId === company.id && r.year === selectedYear && r.month === activeMonth
+                );
+                const monthAmt = monthRecord
+                  ? monthRecord.items.reduce((s, i) => s + (Number(i.amount) || 0), 0)
+                  : 0;
+                const hasMonthRecord = !!monthRecord;
+                return (
+                  <div key={company.id} className="bg-white rounded-xl border border-gray-100 p-3 flex flex-col gap-2.5 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <CompanyLogo company={company} size="md" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">{company.name}</p>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <p className="text-[10px] text-gray-400">{company.type === 'primary' ? '원도급사' : '협력사'}</p>
+                          {company.includedInPrimary && (
+                            <span className="text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded-full font-medium">원도급 포함</span>
+                          )}
+                          {includedSubNames?.length > 0 && (
+                            <span className="text-[9px] bg-amber-50 text-amber-500 px-1 py-0.5 rounded-full">+협력사 포함</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-xs border-t border-gray-50 pt-2">
+                      <span className="text-gray-400">{periodLabel} 누계</span>
+                      <span className="font-bold text-gray-700">{formatCurrency(executed)}원 <span className="text-gray-400 font-normal">({formatPercent(rate)})</span></span>
+                    </div>
+                    <div className={`flex justify-between text-xs rounded-lg px-2.5 py-1.5 ${hasMonthRecord ? 'bg-primary/10 border border-primary/20' : 'bg-gray-50 border border-dashed border-gray-200'}`}>
+                      <span className={hasMonthRecord ? 'text-primary font-medium' : 'text-gray-400'}>{activeMonth}월 집행</span>
+                      <span className={hasMonthRecord ? 'font-bold text-primary' : 'text-gray-300'}>
+                        {hasMonthRecord ? `${formatCurrency(monthAmt)}원` : '미등록'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setEditModal({ month: activeMonth, record: monthRecord || null, isNew: !monthRecord, forCompany: company })}
+                      className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
+                        hasMonthRecord
+                          ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          : 'bg-primary text-white hover:bg-primary/90 shadow-sm'
+                      }`}
+                    >
+                      {hasMonthRecord ? `${activeMonth}월 수정` : `${activeMonth}월 등록`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
