@@ -978,7 +978,7 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
               {year}년 예산 <strong className="text-gray-700">{formatCurrency(yearBudgetTotal)}원</strong>
             </span>
             <span className="text-gray-500">
-              기집행 <strong className="text-gray-700">{formatCurrency(pastExecutedTotal)}원</strong>
+              타월집행 <strong className="text-gray-700">{formatCurrency(pastExecutedTotal)}원</strong>
             </span>
             <span className="text-gray-500">
               이번 입력 <strong className="text-primary">{formatCurrency(total)}원</strong>
@@ -994,8 +994,8 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
           const showBudgetCols = yearBudgetTotal > 0;
           // footer의 "합계" 레이블이 차지할 colSpan
           const footerLabelSpan = isGeneral
-            ? 1 + (showBudgetCols ? 3 : 0)
-            : 1 + (showTotalCol ? 1 : 0) + (showBudgetCols ? 3 : 0) + 1; // +1 = 상세
+            ? 1 + (showBudgetCols ? 2 : 0)
+            : 1 + (showTotalCol ? 1 : 0) + (showBudgetCols ? 2 : 0) + 1; // +1 = 상세
 
           const thCls = 'px-3 py-2 text-right text-xs font-semibold text-gray-500 whitespace-nowrap';
           const numCls = (over) => `px-3 py-2 text-right text-xs tabular-nums whitespace-nowrap ${over ? 'text-red-500 font-semibold' : 'text-gray-500'}`;
@@ -1008,9 +1008,13 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">항목</th>
                     {showTotalCol && <th className={thCls}>전체예산</th>}
                     {showBudgetCols && <th className={thCls}>{year}년 예산</th>}
-                    {showBudgetCols && <th className={thCls}>기집행</th>}
                     {showBudgetCols && <th className={thCls}>잔액</th>}
-                    {!isGeneral && <th className="px-3 py-2 text-center font-semibold text-gray-600 w-14">상세</th>}
+                    {!isGeneral && (
+                      <th className="px-2 py-2 text-center font-semibold text-gray-600 w-20 text-xs leading-tight">
+                        <span>상세입력</span>
+                        <span className="block text-[9px] text-primary font-normal">↕ 집행액 반영</span>
+                      </th>
+                    )}
                     <th className="px-3 py-2 text-right font-semibold text-gray-600 w-40">집행액(원)</th>
                     {isGeneral && <th className="w-8" />}
                   </tr>
@@ -1035,7 +1039,6 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                             />
                           </td>
                           {showBudgetCols && <td className={thCls}>{yBudget > 0 ? formatCurrency(yBudget) : <span className="text-gray-300">-</span>}</td>}
-                          {showBudgetCols && <td className={thCls}>{formatCurrency(pastExec)}</td>}
                           {showBudgetCols && <td className={numCls(itemOver)}>{yBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}</td>}
                           <td className="px-3 py-2">
                             <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
@@ -1076,16 +1079,31 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                           </td>
                           {showTotalCol && <td className={thCls}>{tBudget > 0 ? formatCurrency(tBudget) : <span className="text-gray-300">-</span>}</td>}
                           {showBudgetCols && <td className={thCls}>{yBudget > 0 ? formatCurrency(yBudget) : <span className="text-gray-300">-</span>}</td>}
-                          {showBudgetCols && <td className={thCls}>{formatCurrency(pastExec)}</td>}
                           {showBudgetCols && <td className={numCls(itemOver)}>{yBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}</td>}
                           <td className="px-1 py-2 text-center">
-                            <button
-                              onClick={() => setDetailModalOpen(item.categoryId)}
-                              className="p-1.5 rounded-md transition-colors bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary"
-                              title="상세내역 입력"
-                            >
-                              <List size={13} />
-                            </button>
+                            {(() => {
+                              const detailSum = item.details?.reduce((s, d) => s + (Number(d.amount) || 0), 0) || 0;
+                              const hasDetails = (item.details?.length || 0) > 0;
+                              return (
+                                <button
+                                  onClick={() => setDetailModalOpen(item.categoryId)}
+                                  className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-md transition-colors w-full ${
+                                    hasDetails
+                                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                                      : 'bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary'
+                                  }`}
+                                  title="상세내역 입력 (저장 시 집행액에 반영)"
+                                >
+                                  <List size={12} />
+                                  <span className="text-[9px] font-medium">상세입력</span>
+                                  {hasDetails && (
+                                    <span className="text-[9px] tabular-nums font-bold leading-tight">
+                                      {formatCurrency(detailSum)}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })()}
                           </td>
                           <td className="px-3 py-2">
                             <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.categoryId, val)} />
