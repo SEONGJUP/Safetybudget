@@ -275,7 +275,7 @@ export default function ExecutionRecord() {
                       {hasRecords ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); setMonthModal({ month, records }); }}
-                          className="text-[9px] px-1.5 py-0.5 rounded bg-white/80 border border-current opacity-70 hover:opacity-100 transition-opacity leading-tight"
+                          className="text-[9px] px-3 py-0.5 rounded bg-white/80 border border-current opacity-70 hover:opacity-100 transition-opacity leading-tight"
                           style={{ color: allApproved ? '#059669' : hasDraft ? '#d97706' : '#3b82f6' }}
                         >
                           상세
