@@ -13,7 +13,7 @@ import { formatCurrency, formatPercent, formatFileSize, formatDate, generateId, 
 import CompanyLogo from '@/components/ui/CompanyLogo';
 import CompanySelect from '@/components/ui/CompanySelect';
 import Select from '@/components/ui/Select';
-import { Save, Edit3, FileText, Paperclip, Download, Trash2, Eye, Check, X, Printer, List } from 'lucide-react';
+import { Save, Edit3, FileText, Paperclip, Download, Trash2, Eye, Check, X, Printer, List, AlertTriangle } from 'lucide-react';
 import DetailEntryModal from '@/components/execution/DetailEntryModal';
 
 export default function ExecutionRecord() {
@@ -630,7 +630,7 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
-                  <td className="px-3 py-2.5 text-xs" colSpan={2}>합계 (원)</td>
+                  <td className="px-3 py-2.5 text-xs" colSpan={isGeneral ? 1 : 2}>합계 (원)</td>
                   {recordCompanies.map((comp) => (
                     <td key={comp.id} className="px-3 py-2.5 text-right text-xs tabular-nums">
                       {formatCurrency(companyTotals[comp.id])}
@@ -865,6 +865,52 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
 
   const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
+  // ─── 예산 현황 계산 ───
+  const execRecords = (isGeneral ? data?.generalExecutionRecords : data?.executionRecords) || [];
+
+  // 이번 월 제외 기 집행액 (같은 회사, 같은 연도)
+  const pastMonthRecords = execRecords.filter(
+    (er) => er.companyId === companyId && er.year === year && er.month !== month
+  );
+
+  // 년도별 예산 플랜
+  const yearPlan = budgetPlans?.find(
+    (bp) => bp.companyId === companyId && bp.period === 'yearly' && bp.year === year
+  );
+  // 전체기간 예산 플랜 (건설현장만)
+  const totalPlan = !isGeneral
+    ? budgetPlans?.find((bp) => bp.companyId === companyId && bp.period === 'total')
+    : null;
+
+  const getItemYearBudget = (key) => {
+    const planItem = isGeneral
+      ? yearPlan?.items?.find((i) => i.name === key)
+      : yearPlan?.items?.find((i) => i.categoryId === key);
+    return Number(planItem?.amount) || 0;
+  };
+  const getItemTotalBudget = (key) => {
+    if (!totalPlan) return 0;
+    const planItem = totalPlan.items?.find((i) => i.categoryId === key);
+    return Number(planItem?.amount) || 0;
+  };
+  const getItemPastExecuted = (key) => {
+    return pastMonthRecords.reduce((sum, er) => {
+      const it = isGeneral
+        ? er.items.find((i) => i.name === key)
+        : er.items.find((i) => i.categoryId === key);
+      return sum + (Number(it?.amount) || 0);
+    }, 0);
+  };
+
+  // 전체 연도 예산 합계
+  const yearBudgetTotal = yearPlan?.items?.reduce((s, i) => s + (Number(i.amount) || 0), 0) || 0;
+  const totalBudgetTotal = totalPlan?.items?.reduce((s, i) => s + (Number(i.amount) || 0), 0) || 0;
+  const pastExecutedTotal = pastMonthRecords.reduce(
+    (sum, er) => sum + er.items.reduce((s, i) => s + (Number(i.amount) || 0), 0), 0
+  );
+  const isYearOverBudget = yearBudgetTotal > 0 && (pastExecutedTotal + total) > yearBudgetTotal;
+  const isTotalOverBudget = totalBudgetTotal > 0 && (pastExecutedTotal + total) > totalBudgetTotal;
+
   const handleFileAdd = (fileInfo) => {
     setUploadedFiles((prev) => [...prev, { ...fileInfo, id: generateId(), categoryId }]);
   };
@@ -908,7 +954,7 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
       isOpen
       onClose={onClose}
       title={`${year}년 ${month}월 집행실적 ${isNew ? '등록' : '편집'}`}
-      size="lg"
+      size="xl"
     >
       <div className="space-y-4">
         {isNew && (
@@ -918,6 +964,29 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
             companies={companies}
             label="회사 선택"
           />
+        )}
+
+        {/* 예산 요약 헤더 */}
+        {yearBudgetTotal > 0 && (
+          <div className="flex flex-wrap gap-x-5 gap-y-1 bg-gray-50 rounded-lg px-4 py-2.5 text-xs">
+            {!isGeneral && totalBudgetTotal > 0 && (
+              <span className="text-gray-500">
+                전체예산 <strong className="text-gray-700">{formatCurrency(totalBudgetTotal)}원</strong>
+              </span>
+            )}
+            <span className="text-gray-500">
+              {year}년 예산 <strong className="text-gray-700">{formatCurrency(yearBudgetTotal)}원</strong>
+            </span>
+            <span className="text-gray-500">
+              기집행 <strong className="text-gray-700">{formatCurrency(pastExecutedTotal)}원</strong>
+            </span>
+            <span className="text-gray-500">
+              이번 입력 <strong className="text-primary">{formatCurrency(total)}원</strong>
+            </span>
+            <span className={`font-medium ${isYearOverBudget ? 'text-red-500' : 'text-emerald-600'}`}>
+              잔액 {formatCurrency(yearBudgetTotal - pastExecutedTotal - total)}원
+            </span>
+          </div>
         )}
 
         <table className="w-full text-sm">
@@ -931,36 +1000,52 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
           </thead>
           <tbody>
             {isGeneral ? (
-              items.map((item, idx) => (
-                <tr key={idx} className="border-b border-gray-50">
-                  <td className="px-3 py-2">
-                    <input
-                      type="text"
-                      value={item.name}
-                      onChange={(e) => handleItemNameChange(idx, e.target.value)}
-                      placeholder="항목명"
-                      className="w-full text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
-                  </td>
-                  <td className="px-1 py-2 text-center">
-                    <button onClick={() => handleRemoveItem(idx)} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors">
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))
+              items.map((item, idx) => {
+                const yBudget = getItemYearBudget(item.name);
+                const pastExec = getItemPastExecuted(item.name);
+                const itemAmt = Number(item.amount) || 0;
+                const itemOver = yBudget > 0 && (pastExec + itemAmt) > yBudget;
+                return (
+                  <tr key={idx} className={`border-b border-gray-50 ${itemOver ? 'bg-red-50/30' : ''}`}>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => handleItemNameChange(idx, e.target.value)}
+                        placeholder="항목명"
+                        className="w-full text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      {yBudget > 0 && (
+                        <p className={`text-[10px] mt-0.5 ${itemOver ? 'text-red-400' : 'text-gray-400'}`}>
+                          예산 {formatCurrency(yBudget)} · 기집행 {formatCurrency(pastExec)} · 잔 {formatCurrency(yBudget - pastExec - itemAmt)}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
+                    </td>
+                    <td className="px-1 py-2 text-center">
+                      <button onClick={() => handleRemoveItem(idx)} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               items.map((item) => {
                 const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
                 const detailCount = item.details?.length || 0;
                 const evCount = item.evidences?.length || 0;
+                const yBudget = getItemYearBudget(item.categoryId);
+                const tBudget = getItemTotalBudget(item.categoryId);
+                const pastExec = getItemPastExecuted(item.categoryId);
+                const itemAmt = Number(item.amount) || 0;
+                const itemOver = yBudget > 0 && (pastExec + itemAmt) > yBudget;
                 return (
-                  <tr key={item.categoryId} className="border-b border-gray-50">
+                  <tr key={item.categoryId} className={`border-b border-gray-50 ${itemOver ? 'bg-red-50/30' : ''}`}>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {detailCount > 0 && (
                           <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
                         )}
@@ -971,6 +1056,12 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                         )}
                         <span className="text-xs">{cat?.shortName}</span>
                       </div>
+                      {(yBudget > 0 || tBudget > 0) && (
+                        <p className={`text-[10px] mt-0.5 ${itemOver ? 'text-red-400' : 'text-gray-400'}`}>
+                          {tBudget > 0 && <span className="mr-1.5">전체 {formatCurrency(tBudget)}</span>}
+                          {yBudget > 0 && <span>{year}년 {formatCurrency(yBudget)} · 기집행 {formatCurrency(pastExec)} · 잔 {formatCurrency(yBudget - pastExec - itemAmt)}</span>}
+                        </p>
+                      )}
                     </td>
                     <td className="px-1 py-2 text-center">
                       <button
@@ -1025,6 +1116,21 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
             onRemove={handleFileRemove}
           />
         </div>
+
+        {/* 예산 초과 알림 */}
+        {(isYearOverBudget || isTotalOverBudget) && (
+          <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2.5 rounded-lg">
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              {isYearOverBudget && (
+                <p><strong>{year}년 예산 초과</strong> — 예산 {formatCurrency(yearBudgetTotal)}원 대비 집행 예정 {formatCurrency(pastExecutedTotal + total)}원 (초과 {formatCurrency(pastExecutedTotal + total - yearBudgetTotal)}원)</p>
+              )}
+              {isTotalOverBudget && (
+                <p><strong>전체기간 예산 초과</strong> — 예산 {formatCurrency(totalBudgetTotal)}원 대비 집행 예정 {formatCurrency(pastExecutedTotal + total)}원 (초과 {formatCurrency(pastExecutedTotal + total - totalBudgetTotal)}원)</p>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="secondary" onClick={onClose}>취소</Button>
