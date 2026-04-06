@@ -248,7 +248,7 @@ export default function ExecutionRecord() {
                 return (
                   <div
                     key={month}
-                    className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-between py-2.5 transition-all cursor-pointer hover:shadow-md hover:scale-[1.03] ${
+                    className={`relative aspect-square rounded-xl border-2 flex flex-col items-center justify-between py-2.5 transition-all cursor-pointer hover:shadow-md hover:scale-[1.03] ${
                       isActive
                         ? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/30'
                         : hasRecords
@@ -259,10 +259,7 @@ export default function ExecutionRecord() {
                           : 'border-blue-300 bg-blue-50/50 shadow-sm'
                         : 'border-gray-150 bg-gray-50 hover:border-primary/40 hover:bg-primary/5'
                     }`}
-                    onClick={() => {
-                      setActiveMonth(month);
-                      if (hasRecords) setMonthModal({ month, records });
-                    }}
+                    onClick={() => setActiveMonth(month)}
                   >
                     <span className={`text-base font-extrabold ${
                       isActive ? 'text-primary' :
@@ -273,8 +270,20 @@ export default function ExecutionRecord() {
                     <span className={`text-[10px] leading-tight text-center tabular-nums ${total > 0 ? 'text-gray-600 font-semibold' : 'text-gray-300'}`}>
                       {total > 0 ? <>{formatCurrency(total)}<span className="text-gray-400 ml-px">원</span></> : '미등록'}
                     </span>
-                    <div className="h-2.5 flex items-center justify-center">
-                      {report && (
+                    {/* 하단: 보고서 dot 또는 상세보기 버튼 */}
+                    <div className="h-4 flex items-center justify-center">
+                      {hasRecords ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setMonthModal({ month, records }); }}
+                          className="text-[9px] px-1.5 py-0.5 rounded bg-white/80 border border-current opacity-70 hover:opacity-100 transition-opacity leading-tight"
+                          style={{ color: allApproved ? '#059669' : hasDraft ? '#d97706' : '#3b82f6' }}
+                        >
+                          상세
+                        </button>
+                      ) : (
+                        <div className="h-2.5" />
+                      )}
+                      {report && !hasRecords && (
                         <div className={`w-2.5 h-2.5 rounded-full ${
                           report.status === 'approved' ? 'bg-emerald-500' :
                           report.status === 'submitted' ? 'bg-amber-500' :
