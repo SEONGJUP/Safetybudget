@@ -603,18 +603,29 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
     ? [...new Set(records.flatMap((r) => r.items.map((i) => i.name)).filter(Boolean))]
     : BUDGET_CATEGORIES.map((c) => c.id);
 
-  // 년도 예산 합계 (전체 회사 합산)
+  // 년도 예산 (전체 회사 합산)
   const yearPlans = (budgetPlans || []).filter((bp) => bp.period === 'yearly' && bp.year === selectedYear);
-  const getYearBudget = (key) => {
-    return yearPlans.reduce((sum, bp) => {
-      const item = isGeneral
-        ? bp.items?.find((i) => i.name === key)
-        : bp.items?.find((i) => i.categoryId === key);
-      return sum + (Number(item?.amount) || 0);
-    }, 0);
-  };
+  const totalPlans = !isGeneral ? (budgetPlans || []).filter((bp) => bp.period === 'total') : [];
+  const getYearBudget = (key) => yearPlans.reduce((sum, bp) => {
+    const item = isGeneral ? bp.items?.find((i) => i.name === key) : bp.items?.find((i) => i.categoryId === key);
+    return sum + (Number(item?.amount) || 0);
+  }, 0);
+  const getTotalBudget = (key) => totalPlans.reduce((sum, bp) => {
+    const item = bp.items?.find((i) => i.categoryId === key);
+    return sum + (Number(item?.amount) || 0);
+  }, 0);
+  // 기집행: 이번 월 제외한 년도 누계
+  const pastRecords = executionRecords.filter((r) => r.year === selectedYear && r.month !== month);
+  const getPastExec = (key) => pastRecords.reduce((sum, r) => {
+    const item = isGeneral ? r.items?.find((i) => i.name === key) : r.items?.find((i) => i.categoryId === key);
+    return sum + (Number(item?.amount) || 0);
+  }, 0);
+
   const yearBudgetTotal = yearPlans.reduce((s, bp) => s + bp.items.reduce((ss, i) => ss + (Number(i.amount) || 0), 0), 0);
+  const totalBudgetTotal = totalPlans.reduce((s, bp) => s + bp.items.reduce((ss, i) => ss + (Number(i.amount) || 0), 0), 0);
+  const pastExecTotal = pastRecords.reduce((s, r) => s + r.items.reduce((ss, i) => ss + (Number(i.amount) || 0), 0), 0);
   const showBudgetCol = yearBudgetTotal > 0;
+  const showTotalBudgetCol = !isGeneral && totalBudgetTotal > 0;
 
   const matrixData = itemKeys.map((key) => {
     const row = { key };
@@ -630,6 +641,8 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
     });
     row.total = rowTotal;
     row.yearBudget = getYearBudget(key);
+    row.totalBudget = getTotalBudget(key);
+    row.pastExec = getPastExec(key);
     if (!isGeneral) row.category = BUDGET_CATEGORIES.find((c) => c.id === key);
     return row;
   });
@@ -689,11 +702,10 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
                 <tr className="border-b border-gray-200 bg-gray-50">
                   {!isGeneral && <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">코드</th>}
                   <th className="px-3 py-2.5 text-left font-semibold text-gray-600 text-xs">항목명</th>
-                  {showBudgetCol && (
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-600 bg-amber-50/60 min-w-[90px] whitespace-nowrap">
-                      {selectedYear}년 예산
-                    </th>
-                  )}
+                  {showTotalBudgetCol && <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 bg-gray-100/80 min-w-[90px] whitespace-nowrap">전체예산</th>}
+                  {showBudgetCol && <th className="px-3 py-2.5 text-right text-xs font-semibold text-amber-600 bg-amber-50/60 min-w-[90px] whitespace-nowrap">{selectedYear}년 예산</th>}
+                  {showBudgetCol && <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 min-w-[90px] whitespace-nowrap">기집행</th>}
+                  {showBudgetCol && <th className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-600 min-w-[80px] whitespace-nowrap">잔여</th>}
                   {recordCompanies.map((comp) => (
                     <th key={comp.id} className="px-3 py-2.5 text-right text-xs min-w-[100px]">
                       <div className="flex items-center justify-end gap-1">
@@ -707,16 +719,32 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
               </thead>
               <tbody>
                 {matrixData.map((row) => {
-                  const isOver = showBudgetCol && row.yearBudget > 0 && row.total > row.yearBudget;
+                  const remaining = row.yearBudget - row.pastExec - row.total;
+                  const isOver = showBudgetCol && row.yearBudget > 0 && remaining < 0;
                   return (
                     <tr key={row.key} className={`border-b border-gray-50 hover:bg-gray-50/50 ${isOver ? 'bg-red-50/20' : ''}`}>
                       {!isGeneral && <td className="px-3 py-2 text-xs text-gray-400">{row.category?.code}</td>}
                       <td className="px-3 py-2 text-xs font-medium whitespace-nowrap">
                         {isGeneral ? row.key : row.category?.shortName}
                       </td>
+                      {showTotalBudgetCol && (
+                        <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-500 bg-gray-100/50">
+                          {row.totalBudget > 0 ? formatCurrency(row.totalBudget) : <span className="text-gray-300">-</span>}
+                        </td>
+                      )}
                       {showBudgetCol && (
                         <td className="px-3 py-2 text-right text-xs tabular-nums text-amber-700 bg-amber-50/40 font-medium">
                           {row.yearBudget > 0 ? formatCurrency(row.yearBudget) : <span className="text-gray-300">-</span>}
+                        </td>
+                      )}
+                      {showBudgetCol && (
+                        <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-500">
+                          {row.pastExec > 0 ? formatCurrency(row.pastExec) : <span className="text-gray-300">-</span>}
+                        </td>
+                      )}
+                      {showBudgetCol && (
+                        <td className={`px-3 py-2 text-right text-xs tabular-nums font-medium ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {row.yearBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}
                         </td>
                       )}
                       {recordCompanies.map((comp) => (
@@ -739,9 +767,12 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
               <tfoot>
                 <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
                   <td className="px-3 py-2.5 text-xs" colSpan={isGeneral ? 1 : 2}>합계 (원)</td>
+                  {showTotalBudgetCol && <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-500 bg-gray-100/50">{formatCurrency(totalBudgetTotal)}</td>}
+                  {showBudgetCol && <td className="px-3 py-2.5 text-right text-xs tabular-nums text-amber-700 bg-amber-50/40 font-bold">{formatCurrency(yearBudgetTotal)}</td>}
+                  {showBudgetCol && <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-500">{formatCurrency(pastExecTotal)}</td>}
                   {showBudgetCol && (
-                    <td className="px-3 py-2.5 text-right text-xs tabular-nums text-amber-700 bg-amber-50/40 font-bold">
-                      {formatCurrency(yearBudgetTotal)}
+                    <td className={`px-3 py-2.5 text-right text-xs tabular-nums font-bold ${yearBudgetTotal - pastExecTotal - grandTotal < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                      {formatCurrency(yearBudgetTotal - pastExecTotal - grandTotal)}
                     </td>
                   )}
                   {recordCompanies.map((comp) => (
@@ -1107,8 +1138,8 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
           const showBudgetCols = yearBudgetTotal > 0;
           // footer의 "합계" 레이블이 차지할 colSpan
           const footerLabelSpan = isGeneral
-            ? 1 + (showBudgetCols ? 2 : 0)
-            : 1 + (showTotalCol ? 1 : 0) + (showBudgetCols ? 2 : 0) + 1; // +1 = 상세
+            ? 1 + (showBudgetCols ? 3 : 0)
+            : 1 + (showTotalCol ? 1 : 0) + (showBudgetCols ? 3 : 0) + 1; // +1 = 상세
 
           const thCls = 'px-3 py-2 text-right text-xs font-semibold text-gray-500 whitespace-nowrap';
           const numCls = (over) => `px-3 py-2 text-right text-xs tabular-nums whitespace-nowrap ${over ? 'text-red-500 font-semibold' : 'text-gray-500'}`;
@@ -1121,6 +1152,7 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">항목</th>
                     {showTotalCol && <th className={thCls}>전체예산</th>}
                     {showBudgetCols && <th className={thCls}>{year}년 예산</th>}
+                    {showBudgetCols && <th className={thCls}>기집행</th>}
                     {showBudgetCols && <th className={thCls}>잔액</th>}
                     {!isGeneral && (
                       <th className="px-2 py-2 text-center font-semibold text-gray-600 w-20 text-xs leading-tight">
@@ -1152,6 +1184,7 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                             />
                           </td>
                           {showBudgetCols && <td className={thCls}>{yBudget > 0 ? formatCurrency(yBudget) : <span className="text-gray-300">-</span>}</td>}
+                          {showBudgetCols && <td className={thCls}>{pastExec > 0 ? formatCurrency(pastExec) : <span className="text-gray-300">-</span>}</td>}
                           {showBudgetCols && <td className={numCls(itemOver)}>{yBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}</td>}
                           <td className="px-3 py-2">
                             <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
@@ -1192,6 +1225,7 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
                           </td>
                           {showTotalCol && <td className={thCls}>{tBudget > 0 ? formatCurrency(tBudget) : <span className="text-gray-300">-</span>}</td>}
                           {showBudgetCols && <td className={thCls}>{yBudget > 0 ? formatCurrency(yBudget) : <span className="text-gray-300">-</span>}</td>}
+                          {showBudgetCols && <td className={thCls}>{pastExec > 0 ? formatCurrency(pastExec) : <span className="text-gray-300">-</span>}</td>}
                           {showBudgetCols && <td className={numCls(itemOver)}>{yBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}</td>}
                           <td className="px-1 py-2 text-center">
                             {(() => {
