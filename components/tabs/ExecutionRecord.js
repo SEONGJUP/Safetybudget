@@ -989,112 +989,129 @@ function ExecutionEditModal({ isGeneral, year, month, record, isNew, companies, 
           </div>
         )}
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="px-3 py-2 text-left font-semibold text-gray-600">항목</th>
-              {!isGeneral && <th className="px-3 py-2 text-center font-semibold text-gray-600 w-16">상세</th>}
-              <th className="px-3 py-2 text-right font-semibold text-gray-600 w-44">집행액(원)</th>
-              {isGeneral && <th className="w-8" />}
-            </tr>
-          </thead>
-          <tbody>
-            {isGeneral ? (
-              items.map((item, idx) => {
-                const yBudget = getItemYearBudget(item.name);
-                const pastExec = getItemPastExecuted(item.name);
-                const itemAmt = Number(item.amount) || 0;
-                const itemOver = yBudget > 0 && (pastExec + itemAmt) > yBudget;
-                return (
-                  <tr key={idx} className={`border-b border-gray-50 ${itemOver ? 'bg-red-50/30' : ''}`}>
-                    <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) => handleItemNameChange(idx, e.target.value)}
-                        placeholder="항목명"
-                        className="w-full text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                      {yBudget > 0 && (
-                        <p className={`text-[10px] mt-0.5 ${itemOver ? 'text-red-400' : 'text-gray-400'}`}>
-                          예산 {formatCurrency(yBudget)} · 기집행 {formatCurrency(pastExec)} · 잔 {formatCurrency(yBudget - pastExec - itemAmt)}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
-                    </td>
-                    <td className="px-1 py-2 text-center">
-                      <button onClick={() => handleRemoveItem(idx)} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors">
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
+        {(() => {
+          const showTotalCol = !isGeneral && totalBudgetTotal > 0;
+          const showBudgetCols = yearBudgetTotal > 0;
+          // footer의 "합계" 레이블이 차지할 colSpan
+          const footerLabelSpan = isGeneral
+            ? 1 + (showBudgetCols ? 3 : 0)
+            : 1 + (showTotalCol ? 1 : 0) + (showBudgetCols ? 3 : 0) + 1; // +1 = 상세
+
+          const thCls = 'px-3 py-2 text-right text-xs font-semibold text-gray-500 whitespace-nowrap';
+          const numCls = (over) => `px-3 py-2 text-right text-xs tabular-nums whitespace-nowrap ${over ? 'text-red-500 font-semibold' : 'text-gray-500'}`;
+
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600">항목</th>
+                    {showTotalCol && <th className={thCls}>전체예산</th>}
+                    {showBudgetCols && <th className={thCls}>{year}년 예산</th>}
+                    {showBudgetCols && <th className={thCls}>기집행</th>}
+                    {showBudgetCols && <th className={thCls}>잔액</th>}
+                    {!isGeneral && <th className="px-3 py-2 text-center font-semibold text-gray-600 w-14">상세</th>}
+                    <th className="px-3 py-2 text-right font-semibold text-gray-600 w-40">집행액(원)</th>
+                    {isGeneral && <th className="w-8" />}
                   </tr>
-                );
-              })
-            ) : (
-              items.map((item) => {
-                const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
-                const detailCount = item.details?.length || 0;
-                const evCount = item.evidences?.length || 0;
-                const yBudget = getItemYearBudget(item.categoryId);
-                const tBudget = getItemTotalBudget(item.categoryId);
-                const pastExec = getItemPastExecuted(item.categoryId);
-                const itemAmt = Number(item.amount) || 0;
-                const itemOver = yBudget > 0 && (pastExec + itemAmt) > yBudget;
-                return (
-                  <tr key={item.categoryId} className={`border-b border-gray-50 ${itemOver ? 'bg-red-50/30' : ''}`}>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {detailCount > 0 && (
-                          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
-                        )}
-                        {evCount > 0 && (
-                          <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
-                            <Paperclip size={8} />{evCount}
-                          </span>
-                        )}
-                        <span className="text-xs">{cat?.shortName}</span>
-                      </div>
-                      {(yBudget > 0 || tBudget > 0) && (
-                        <p className={`text-[10px] mt-0.5 ${itemOver ? 'text-red-400' : 'text-gray-400'}`}>
-                          {tBudget > 0 && <span className="mr-1.5">전체 {formatCurrency(tBudget)}</span>}
-                          {yBudget > 0 && <span>{year}년 {formatCurrency(yBudget)} · 기집행 {formatCurrency(pastExec)} · 잔 {formatCurrency(yBudget - pastExec - itemAmt)}</span>}
-                        </p>
-                      )}
+                </thead>
+                <tbody>
+                  {isGeneral ? (
+                    items.map((item, idx) => {
+                      const yBudget = getItemYearBudget(item.name);
+                      const pastExec = getItemPastExecuted(item.name);
+                      const itemAmt = Number(item.amount) || 0;
+                      const itemOver = yBudget > 0 && (pastExec + itemAmt) > yBudget;
+                      const remaining = yBudget - pastExec - itemAmt;
+                      return (
+                        <tr key={idx} className={`border-b border-gray-50 ${itemOver ? 'bg-red-50/30' : ''}`}>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => handleItemNameChange(idx, e.target.value)}
+                              placeholder="항목명"
+                              className="w-full text-xs px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          </td>
+                          {showBudgetCols && <td className={thCls}>{yBudget > 0 ? formatCurrency(yBudget) : <span className="text-gray-300">-</span>}</td>}
+                          {showBudgetCols && <td className={thCls}>{formatCurrency(pastExec)}</td>}
+                          {showBudgetCols && <td className={numCls(itemOver)}>{yBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}</td>}
+                          <td className="px-3 py-2">
+                            <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.name, val)} />
+                          </td>
+                          <td className="px-1 py-2 text-center">
+                            <button onClick={() => handleRemoveItem(idx)} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    items.map((item) => {
+                      const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
+                      const detailCount = item.details?.length || 0;
+                      const evCount = item.evidences?.length || 0;
+                      const yBudget = getItemYearBudget(item.categoryId);
+                      const tBudget = getItemTotalBudget(item.categoryId);
+                      const pastExec = getItemPastExecuted(item.categoryId);
+                      const itemAmt = Number(item.amount) || 0;
+                      const itemOver = yBudget > 0 && (pastExec + itemAmt) > yBudget;
+                      const remaining = yBudget - pastExec - itemAmt;
+                      return (
+                        <tr key={item.categoryId} className={`border-b border-gray-50 ${itemOver ? 'bg-red-50/30' : ''}`}>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {detailCount > 0 && (
+                                <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">{detailCount}건</span>
+                              )}
+                              {evCount > 0 && (
+                                <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+                                  <Paperclip size={8} />{evCount}
+                                </span>
+                              )}
+                              <span className="text-xs">{cat?.shortName}</span>
+                            </div>
+                          </td>
+                          {showTotalCol && <td className={thCls}>{tBudget > 0 ? formatCurrency(tBudget) : <span className="text-gray-300">-</span>}</td>}
+                          {showBudgetCols && <td className={thCls}>{yBudget > 0 ? formatCurrency(yBudget) : <span className="text-gray-300">-</span>}</td>}
+                          {showBudgetCols && <td className={thCls}>{formatCurrency(pastExec)}</td>}
+                          {showBudgetCols && <td className={numCls(itemOver)}>{yBudget > 0 ? formatCurrency(remaining) : <span className="text-gray-300">-</span>}</td>}
+                          <td className="px-1 py-2 text-center">
+                            <button
+                              onClick={() => setDetailModalOpen(item.categoryId)}
+                              className="p-1.5 rounded-md transition-colors bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary"
+                              title="상세내역 입력"
+                            >
+                              <List size={13} />
+                            </button>
+                          </td>
+                          <td className="px-3 py-2">
+                            <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.categoryId, val)} />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-primary-light font-bold">
+                    <td className="px-3 py-2.5" colSpan={footerLabelSpan}>
+                      {isGeneral ? (
+                        <button onClick={handleAddItem} className="text-xs text-primary hover:underline">
+                          + 항목 추가
+                        </button>
+                      ) : '합계'}
                     </td>
-                    <td className="px-1 py-2 text-center">
-                      <button
-                        onClick={() => setDetailModalOpen(item.categoryId)}
-                        className="p-1.5 rounded-md transition-colors bg-gray-100 text-gray-400 hover:bg-primary/10 hover:text-primary"
-                        title="상세내역 입력"
-                      >
-                        <List size={13} />
-                      </button>
-                    </td>
-                    <td className="px-3 py-2">
-                      <CurrencyInput value={item.amount} onChange={(val) => handleAmountChange(item.categoryId, val)} />
-                    </td>
+                    <td className="px-3 py-2.5 text-right text-primary tabular-nums">{formatCurrency(total)}원</td>
+                    {isGeneral && <td />}
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-          <tfoot>
-            <tr className="bg-primary-light font-bold">
-              <td className="px-3 py-2.5" colSpan={isGeneral ? 1 : 2}>
-                {isGeneral && (
-                  <button onClick={handleAddItem} className="text-xs text-primary hover:underline flex items-center gap-1">
-                    <span>+ 항목 추가</span>
-                  </button>
-                )}
-                {!isGeneral && '합계'}
-              </td>
-              <td className="px-3 py-2.5 text-right text-primary">{formatCurrency(total)}원</td>
-              {isGeneral && <td />}
-            </tr>
-          </tfoot>
-        </table>
+                </tfoot>
+              </table>
+            </div>
+          );
+        })()}
 
         {/* 증빙 첨부 */}
         <div className="border-t border-gray-100 pt-4">
