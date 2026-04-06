@@ -105,7 +105,11 @@ function ConstructionBudgetPlan() {
         grandTotal={grandTotal}
         calculatedBudget={calculatedBudget}
         diffFromCalc={diffFromCalc}
-        onEdit={(comp) => setEditModal({ plan: getCompanyPlan(comp.id), company: comp })}
+        onEdit={(comp) => setEditModal({
+          plan: getCompanyPlan(comp.id),
+          company: comp,
+          totalPlan: activeBudgetPlans.find((bp) => bp.companyId === comp.id && bp.period === 'total'),
+        })}
         onRemove={removeCurrentCompany}
         onToggleIncluded={(comp) => updateCurrentCompany(comp.id, { includedInPrimary: !comp.includedInPrimary })}
         onAddCompany={() => setShowAddCompany(true)}
@@ -198,6 +202,7 @@ function ConstructionBudgetPlan() {
         <ConstructionEditModal
           plan={editModal.plan}
           company={editModal.company}
+          totalPlan={editModal.totalPlan}
           periodFilter={selectedPeriod}
           yearFilter={selectedYear}
           calculatedBudget={calculatedBudget}
@@ -603,7 +608,7 @@ function AddCompanyModal({ registry, currentCompanyIds, onAdd, onGoToManagement,
 /* ════════════════════════════════════════════
    건설현장 편집 모달
 ════════════════════════════════════════════ */
-function ConstructionEditModal({ plan, company, periodFilter, yearFilter, calculatedBudget, onSave, onClose }) {
+function ConstructionEditModal({ plan, company, totalPlan, periodFilter, yearFilter, calculatedBudget, onSave, onClose }) {
   const initialItems = plan
     ? [...plan.items]
     : BUDGET_CATEGORIES.map((cat) => ({ categoryId: cat.id, amount: 0, note: '' }));
@@ -612,6 +617,14 @@ function ConstructionEditModal({ plan, company, periodFilter, yearFilter, calcul
   const total = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const diff = calculatedBudget - total;
   const isPrimary = company.type === 'primary';
+
+  // 년도별 편성 시 전체예산 참고용
+  const isYearly = periodFilter === 'yearly';
+  const totalPlanTotal = totalPlan?.items?.reduce((s, i) => s + (Number(i.amount) || 0), 0) || 0;
+  const getTotalItemAmt = (categoryId) => {
+    const it = totalPlan?.items?.find((i) => i.categoryId === categoryId);
+    return Number(it?.amount) || 0;
+  };
 
   const handleSave = () => {
     onSave({
@@ -626,7 +639,7 @@ function ConstructionEditModal({ plan, company, periodFilter, yearFilter, calcul
 
   return (
     <Modal isOpen onClose={onClose}
-      title={<div className="flex items-center gap-2"><CompanyLogo company={company} size="sm" /><span>{company.name} 예산편성</span></div>}
+      title={<div className="flex items-center gap-2"><CompanyLogo company={company} size="sm" /><span>{company.name} {isYearly ? `${yearFilter}년 ` : '전체기간 '}예산편성</span></div>}
       size="lg">
       <div className="space-y-4">
         {isPrimary && calculatedBudget > 0 && (
@@ -646,17 +659,28 @@ function ConstructionEditModal({ plan, company, periodFilter, yearFilter, calcul
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-3 py-2 text-left text-gray-600 w-10 text-xs">코드</th>
                 <th className="px-3 py-2 text-left text-gray-600">항목</th>
-                <th className="px-3 py-2 text-right text-gray-600 w-44">예산액(원)</th>
+                {isYearly && totalPlanTotal > 0 && (
+                  <th className="px-3 py-2 text-right text-gray-400 text-xs w-32 whitespace-nowrap">전체예산 (참고)</th>
+                )}
+                <th className="px-3 py-2 text-right text-gray-600 w-44">{isYearly ? `${yearFilter}년 ` : ''}예산액(원)</th>
                 <th className="px-3 py-2 text-left text-gray-600 w-32">비고</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => {
                 const cat = BUDGET_CATEGORIES.find((c) => c.id === item.categoryId);
+                const totalAmt = getTotalItemAmt(item.categoryId);
+                const yearAmt = Number(item.amount) || 0;
+                const overTotal = isYearly && totalAmt > 0 && yearAmt > totalAmt;
                 return (
-                  <tr key={item.categoryId} className="border-b border-gray-50">
+                  <tr key={item.categoryId} className={`border-b border-gray-50 ${overTotal ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-3 py-2 text-gray-400 text-xs">{cat?.code}</td>
                     <td className="px-3 py-2 text-sm">{cat?.shortName}</td>
+                    {isYearly && totalPlanTotal > 0 && (
+                      <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-400">
+                        {totalAmt > 0 ? formatCurrency(totalAmt) : <span className="text-gray-200">-</span>}
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <CurrencyInput value={item.amount}
                         onChange={(val) => setItems((prev) => prev.map((i) => i.categoryId === item.categoryId ? { ...i, amount: val } : i))} />
@@ -673,6 +697,11 @@ function ConstructionEditModal({ plan, company, periodFilter, yearFilter, calcul
             <tfoot>
               <tr className={`font-bold ${isPrimary && calculatedBudget > 0 ? (diff >= 0 ? 'bg-emerald-50' : 'bg-red-50') : 'bg-primary/5'}`}>
                 <td className="px-3 py-2.5" colSpan={2}>합계</td>
+                {isYearly && totalPlanTotal > 0 && (
+                  <td className="px-3 py-2.5 text-right text-xs tabular-nums text-gray-400">
+                    {formatCurrency(totalPlanTotal)}
+                  </td>
+                )}
                 <td className={`px-3 py-2.5 text-right tabular-nums ${isPrimary && calculatedBudget > 0 ? (diff >= 0 ? 'text-emerald-700' : 'text-red-600') : 'text-primary'}`}>
                   {formatCurrency(total)}원
                 </td>
