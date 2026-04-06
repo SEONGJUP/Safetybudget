@@ -166,7 +166,13 @@ export default function ExecutionRecord() {
       </div>
 
       {/* 회사별 집행 통계 카드 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <span className="w-1 h-4 bg-primary rounded-full shrink-0" />
+          <h3 className="text-sm font-bold text-gray-700">업체별 집행현황</h3>
+          <span className="text-xs text-gray-400">— 카드 클릭 시 해당 월 집행실적 등록</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {companyStats.map(({ company, executed, budget, rate, includedSubNames }) => (
           <div
             key={company.id}
@@ -225,6 +231,7 @@ export default function ExecutionRecord() {
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       {/* 전체기간: 년도별 집행실적 요약 */}
@@ -446,7 +453,11 @@ function YearSummaryGrid({ records, plans, selectedCompanyId, onSelectYear }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-gray-400 px-1">연도를 클릭하면 해당 연도의 집행실적을 볼 수 있습니다.</p>
+      <div className="flex items-center gap-2 px-1 pt-2 border-t border-gray-200">
+        <span className="w-1 h-4 bg-amber-400 rounded-full shrink-0" />
+        <h3 className="text-sm font-bold text-gray-700">연도별 집행현황</h3>
+        <span className="text-xs text-gray-400">— 연도 클릭 시 해당 년도 상세보기</span>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {years.map((year) => {
           const yearRecords = records.filter((r) => {
@@ -472,7 +483,7 @@ function YearSummaryGrid({ records, plans, selectedCompanyId, onSelectYear }) {
           return (
             <div
               key={year}
-              className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md hover:border-primary/40 transition-all cursor-pointer"
+              className="bg-amber-50/40 rounded-xl border border-amber-100 shadow-sm p-4 hover:shadow-md hover:border-amber-300 transition-all cursor-pointer"
               onClick={() => onSelectYear(year)}
             >
               <div className="flex items-center justify-between mb-3">
