@@ -854,6 +854,7 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
           month={month}
           report={report}
           executionRecords={executionRecords}
+          budgetPlans={budgetPlans}
           companies={companies}
           onClose={() => setPreviewOpen(false)}
         />
@@ -863,85 +864,149 @@ function MonthViewModal({ isGeneral, periodLabel, month, records, companies, exe
 }
 
 /* ─── 보고서 미리보기 모달 ─── */
-function ReportPreviewModal({ year, month, report, executionRecords, companies, onClose }) {
-  const monthRecords = executionRecords.filter(
-    (r) => r.year === year && r.month === month
-  );
+function ReportPreviewModal({ year, month, report, executionRecords, budgetPlans, companies, onClose }) {
+  const primaryCompany = companies.find((c) => c.type === 'primary');
 
-  const getCompany = (id) => companies.find((c) => c.id === id);
+  // 년도 예산 (전체 회사 합산)
+  const yearPlans = (budgetPlans || []).filter((bp) => bp.period === 'yearly' && bp.year === year);
+  const totalPlans = (budgetPlans || []).filter((bp) => bp.period === 'total');
 
-  const categoryTotals = BUDGET_CATEGORIES.map((cat) => {
-    const total = monthRecords.reduce((sum, rec) => {
-      const item = rec.items.find((i) => i.categoryId === cat.id);
-      return sum + (item ? Number(item.amount) || 0 : 0);
-    }, 0);
-    return { ...cat, total };
+  const getYearBudget = (catId) => yearPlans.reduce((s, bp) => {
+    const item = bp.items?.find((i) => i.categoryId === catId);
+    return s + (Number(item?.amount) || 0);
+  }, 0);
+  const getTotalBudget = (catId) => totalPlans.reduce((s, bp) => {
+    const item = bp.items?.find((i) => i.categoryId === catId);
+    return s + (Number(item?.amount) || 0);
+  }, 0);
+
+  // 전월사용누계: 1월 ~ (month-1)월 합산
+  const prevRecords = executionRecords.filter((r) => r.year === year && r.month < month);
+  const getPrevTotal = (catId) => prevRecords.reduce((s, r) => {
+    const item = r.items?.find((i) => i.categoryId === catId);
+    return s + (Number(item?.amount) || 0);
+  }, 0);
+
+  // 금월사용금액
+  const monthRecords = executionRecords.filter((r) => r.year === year && r.month === month);
+  const getMonthTotal = (catId) => monthRecords.reduce((s, r) => {
+    const item = r.items?.find((i) => i.categoryId === catId);
+    return s + (Number(item?.amount) || 0);
+  }, 0);
+
+  const rows = BUDGET_CATEGORIES.map((cat) => {
+    const yearBudget = getYearBudget(cat.id);
+    const totalBudget = getTotalBudget(cat.id);
+    const prevTotal = getPrevTotal(cat.id);
+    const monthTotal = getMonthTotal(cat.id);
+    const cumTotal = prevTotal + monthTotal;
+    const remaining = yearBudget - cumTotal;
+    return { ...cat, yearBudget, totalBudget, prevTotal, monthTotal, cumTotal, remaining };
   });
 
-  const grandTotal = categoryTotals.reduce((s, c) => s + c.total, 0);
+  const sumYearBudget = rows.reduce((s, r) => s + r.yearBudget, 0);
+  const sumTotalBudget = rows.reduce((s, r) => s + r.totalBudget, 0);
+  const sumPrev = rows.reduce((s, r) => s + r.prevTotal, 0);
+  const sumMonth = rows.reduce((s, r) => s + r.monthTotal, 0);
+  const sumCum = rows.reduce((s, r) => s + r.cumTotal, 0);
+  const sumRemaining = sumYearBudget - sumCum;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const thCls = 'border border-gray-400 px-2 py-1.5 text-center text-xs font-semibold bg-gray-100';
+  const tdCls = 'border border-gray-300 px-2 py-1.5 text-right text-xs tabular-nums';
+  const tdLCls = 'border border-gray-300 px-2 py-1.5 text-left text-xs';
 
   return (
-    <Modal isOpen onClose={onClose} title={`${year}년 ${month}월 집행실적 보고서`} size="xl">
-      <div className="space-y-6">
-        <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-1">
-          <p><strong>보고기간:</strong> {year}년 {month}월</p>
-          <p><strong>상태:</strong> {report ? report.status : '-'}</p>
-          {report?.submittedAt && <p><strong>제출일:</strong> {formatDate(report.submittedAt)}</p>}
-          {report?.approver && <p><strong>결재자:</strong> {report.approver}</p>}
-        </div>
+    <Modal isOpen onClose={onClose} title={`${year}년 ${month}월 산업안전보건관리비 사용내역 보고서`} size="xl">
+      <div className="space-y-4">
+        {/* 인쇄 영역 */}
+        <div id="report-print-area" className="bg-white p-6 text-sm">
+          {/* 제목 */}
+          <h2 className="text-center text-base font-bold mb-1 tracking-wider">산업안전보건관리비 사용내역 보고서</h2>
+          <p className="text-center text-xs text-gray-500 mb-5">보고기간: {year}년 {month}월 / 작성일: {today}</p>
 
-        <div>
-          <h4 className="font-semibold text-gray-800 mb-3">항목별 집행내역</h4>
-          <table className="w-full text-sm border-collapse">
+          {/* 기본 정보 + 결재란 */}
+          <div className="flex gap-4 mb-5">
+            <div className="flex-1 border border-gray-300 rounded p-3 space-y-1.5 text-xs">
+              <div className="flex gap-2"><span className="w-20 text-gray-500 shrink-0">회사명</span><span className="font-semibold">{primaryCompany?.name || '-'}</span></div>
+              <div className="flex gap-2"><span className="w-20 text-gray-500 shrink-0">보고기간</span><span className="font-semibold">{year}년 {month}월</span></div>
+              {sumTotalBudget > 0 && <div className="flex gap-2"><span className="w-20 text-gray-500 shrink-0">전체기간 계상액</span><span className="font-semibold tabular-nums">{formatCurrency(sumTotalBudget)}원</span></div>}
+              <div className="flex gap-2"><span className="w-20 text-gray-500 shrink-0">{year}년 예산</span><span className="font-semibold tabular-nums">{formatCurrency(sumYearBudget)}원</span></div>
+              {report?.submittedAt && <div className="flex gap-2"><span className="w-20 text-gray-500 shrink-0">제출일</span><span>{formatDate(report.submittedAt)}</span></div>}
+              {report?.approver && <div className="flex gap-2"><span className="w-20 text-gray-500 shrink-0">결재자</span><span>{report.approver}</span></div>}
+            </div>
+            {/* 결재란 */}
+            <div className="shrink-0">
+              <table className="border-collapse text-xs">
+                <thead>
+                  <tr>
+                    {['담당', '검토', '승인'].map((label) => (
+                      <th key={label} className="border border-gray-400 px-5 py-1 text-center font-semibold bg-gray-100">{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {[0, 1, 2].map((i) => (
+                      <td key={i} className="border border-gray-300 px-5 py-8" />
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 메인 집행 테이블 */}
+          <table className="w-full border-collapse text-xs">
             <thead>
-              <tr className="border-b-2 border-gray-200 bg-gray-50">
-                <th className="px-3 py-2 text-left font-semibold">코드</th>
-                <th className="px-3 py-2 text-left font-semibold">항목</th>
-                {monthRecords.map((rec) => (
-                  <th key={rec.id} className="px-3 py-2 text-right font-semibold text-xs">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {getCompany(rec.companyId) && (
-                        <CompanyLogo company={getCompany(rec.companyId)} size="xs" />
-                      )}
-                      {(getCompany(rec.companyId)?.name || '').replace(/\(주\)/g, '').trim()}
-                    </div>
-                  </th>
-                ))}
-                <th className="px-3 py-2 text-right font-semibold">합계</th>
+              <tr>
+                <th className={`${thCls} w-8`}>코드</th>
+                <th className={`${thCls} text-left`} style={{minWidth:'130px'}}>항목명</th>
+                {sumTotalBudget > 0 && <th className={thCls} style={{minWidth:'90px'}}>전체기간<br/>예산액</th>}
+                <th className={`${thCls} bg-amber-50`} style={{minWidth:'90px'}}>{year}년<br/>예산액</th>
+                <th className={thCls} style={{minWidth:'90px'}}>전월<br/>사용누계</th>
+                <th className={`${thCls} bg-blue-50`} style={{minWidth:'90px'}}>{month}월<br/>사용금액</th>
+                <th className={`${thCls} bg-primary-light/40`} style={{minWidth:'90px'}}>전체<br/>사용누계</th>
+                <th className={`${thCls} bg-emerald-50`} style={{minWidth:'80px'}}>잔액</th>
               </tr>
             </thead>
             <tbody>
-              {categoryTotals.map((cat) => (
-                <tr key={cat.id} className="border-b border-gray-50">
-                  <td className="px-3 py-2 text-gray-500">{cat.code}</td>
-                  <td className="px-3 py-2">{cat.shortName}</td>
-                  {monthRecords.map((rec) => {
-                    const item = rec.items.find((i) => i.categoryId === cat.id);
-                    return (
-                      <td key={rec.id} className="px-3 py-2 text-right text-xs tabular-nums">
-                        {formatCurrency(item?.amount || 0)}
-                      </td>
-                    );
-                  })}
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(cat.total)}</td>
+              {rows.map((row) => (
+                <tr key={row.id} className={row.remaining < 0 ? 'bg-red-50/40' : ''}>
+                  <td className={`${tdCls} text-center text-gray-500`}>{row.code}</td>
+                  <td className={tdLCls}>{row.shortName}</td>
+                  {sumTotalBudget > 0 && <td className={tdCls}>{row.totalBudget > 0 ? formatCurrency(row.totalBudget) : '-'}</td>}
+                  <td className={`${tdCls} bg-amber-50/40`}>{row.yearBudget > 0 ? formatCurrency(row.yearBudget) : '-'}</td>
+                  <td className={tdCls}>{row.prevTotal > 0 ? formatCurrency(row.prevTotal) : '-'}</td>
+                  <td className={`${tdCls} bg-blue-50/40 font-semibold`}>{row.monthTotal > 0 ? formatCurrency(row.monthTotal) : '-'}</td>
+                  <td className={`${tdCls} bg-primary-light/20 font-semibold`}>{row.cumTotal > 0 ? formatCurrency(row.cumTotal) : '-'}</td>
+                  <td className={`${tdCls} ${row.remaining < 0 ? 'text-red-600 font-bold' : 'text-emerald-700'} bg-emerald-50/30`}>
+                    {row.yearBudget > 0 ? formatCurrency(row.remaining) : '-'}
+                  </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-primary-light/50 font-bold border-t-2 border-gray-200">
-                <td className="px-3 py-2.5" colSpan={2}>합계</td>
-                {monthRecords.map((rec) => {
-                  const recTotal = rec.items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-                  return (
-                    <td key={rec.id} className="px-3 py-2.5 text-right text-xs tabular-nums">
-                      {formatCurrency(recTotal)}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2.5 text-right text-primary tabular-nums">{formatCurrency(grandTotal)}원</td>
+              <tr className="font-bold bg-gray-100">
+                <td className={`${tdCls} text-center`} colSpan={2}>합 계</td>
+                {sumTotalBudget > 0 && <td className={tdCls}>{formatCurrency(sumTotalBudget)}</td>}
+                <td className={`${tdCls} bg-amber-100`}>{formatCurrency(sumYearBudget)}</td>
+                <td className={tdCls}>{formatCurrency(sumPrev)}</td>
+                <td className={`${tdCls} bg-blue-100`}>{formatCurrency(sumMonth)}</td>
+                <td className={`${tdCls} bg-primary-light/40`}>{formatCurrency(sumCum)}</td>
+                <td className={`${tdCls} ${sumRemaining < 0 ? 'text-red-600' : 'text-emerald-700'} bg-emerald-100`}>{formatCurrency(sumRemaining)}</td>
               </tr>
             </tfoot>
           </table>
+
+          {/* 집행률 요약 */}
+          {sumYearBudget > 0 && (
+            <div className="mt-4 flex gap-6 text-xs text-gray-600 bg-gray-50 rounded p-3 border border-gray-200">
+              <span>년도 집행률 <strong className="text-primary">{formatPercent((sumCum / sumYearBudget) * 100)}</strong></span>
+              <span>({year}년 예산 {formatCurrency(sumYearBudget)}원 대비 누계 {formatCurrency(sumCum)}원)</span>
+              {sumRemaining < 0 && <span className="text-red-500 font-semibold">⚠ 예산 초과 {formatCurrency(-sumRemaining)}원</span>}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t">
